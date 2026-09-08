@@ -62,3 +62,6 @@ export const MainVideoComposition: React.FC<CompositionProps> = ({
     </div>
   );
 };
+
+export { HybridVideoComposition } from "./HybridComposition";
+

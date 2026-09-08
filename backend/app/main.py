@@ -1,9 +1,10 @@
 import os
+import shutil
 import datetime
 import json
 import logging
 from typing import List, Optional
-from fastapi import FastAPI, Depends, HTTPException, status, Security, BackgroundTasks
+from fastapi import FastAPI, Depends, HTTPException, status, Security, BackgroundTasks, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
@@ -31,8 +32,11 @@ from backend.app.agents.agents import (
     AnalyticsAgent,
     LearningAgent
 )
+from backend.app.agents.hybrid_editing_agent import HybridEditingAgent
 from backend.app.services.memory_service import ContentMemorySystem
 from backend.app.services.video_renderer import VideoRendererService
+from backend.app.services.video_analysis_service import VideoAnalysisService
+
 
 # Initialize Database tables
 Base.metadata.create_all(bind=engine)
@@ -465,6 +469,7 @@ async def get_analytics(company_id: int, db: Session = Depends(get_db)):
 
     learning_agent = LearningAgent()
     learn_insights = learning_agent.analyze_performance(records)
+    retention_curve = analytics_agent.generate_retention_curve(duration=65.0)
 
     return {
         "records": [
@@ -480,8 +485,11 @@ async def get_analytics(company_id: int, db: Session = Depends(get_db)):
                 "watch_time": r.watch_time
             } for r in records
         ],
-        "insights": learn_insights
+        "insights": learn_insights,
+        "retention_curve": retention_curve,
+        "editing_benchmarks": learning_agent.get_editing_style_benchmark()
     }
+
 
 @app.get("/api/memory/graph/{company_id}")
 async def get_memory_graph(company_id: int, db: Session = Depends(get_db)):
@@ -489,6 +497,510 @@ async def get_memory_graph(company_id: int, db: Session = Depends(get_db)):
     # Re-calculate engagement scores
     memory_sys.update_engagement_scores(company_id)
     return memory_sys.fetch_knowledge_graph(company_id)
+
+
+# --- Hybrid Video Creation & AI Editing Endpoints ---
+
+class SuggestionUpdateSchema(BaseModel):
+    status: str  # "ACCEPTED" or "REJECTED"
+
+class PlanRequestSchema(BaseModel):
+    platform: Optional[str] = "Instagram Reels"
+    preferred_style: Optional[str] = "HYBRID"
+
+class RenderRequestSchema(BaseModel):
+    platform: Optional[str] = "Instagram Reels"
+    aspect_ratio: Optional[str] = "9:16"
+
+
+def process_hybrid_video_background(video_id: int):
+    """
+    Background worker that runs the full video analysis and hybrid editing pipeline.
+    Updates processing stages in database for real-time frontend polling.
+    """
+    db = SessionLocal()
+    try:
+        video = db.query(db_models.UploadedVideo).filter(db_models.UploadedVideo.id == video_id).first()
+        if not video:
+            return
+
+        company = db.query(db_models.Company).filter(db_models.Company.id == video.company_id).first()
+        company_info = {
+            "company_name": company.company_name if company else "FounderOS",
+            "industry": company.industry if company else "SaaS",
+            "brand_voice": company.brand_voice if company else "Authoritative & Energetic"
+        }
+
+        # Stage 1: Audio Extraction & Speech Recognition
+        video.status = "ANALYZING"
+        video.processing_stage = "Extracting audio track & transcribing speech..."
+        video.processing_progress = 30
+        db.commit()
+
+        analysis_service = VideoAnalysisService()
+        analysis_res = analysis_service.execute_full_pipeline(
+            file_path=video.original_file,
+            filename=video.filename,
+            file_size=video.file_size,
+            company_info=company_info
+        )
+
+        # Stage 2: Scene Detection & Highlights
+        video.processing_stage = "Detecting scenes, hook quality & highlight moments..."
+        video.processing_progress = 60
+        video.duration = analysis_res["metadata"]["duration"]
+        video.resolution = analysis_res["metadata"]["resolution"]
+        video.aspect_ratio = analysis_res["metadata"]["aspect_ratio"]
+        db.commit()
+
+        # Save Transcripts to DB
+        transcript_data = analysis_res["transcription"]
+        v_transcript = db_models.VideoTranscript(
+            video_id=video.id,
+            text=transcript_data["full_transcript"],
+            start_time=0.0,
+            end_time=video.duration,
+            confidence=transcript_data.get("confidence", 0.96),
+            words_json=transcript_data.get("words", [])
+        )
+        db.add(v_transcript)
+
+        # Save Segments to DB
+        for seg in analysis_res["segments"]:
+            v_seg = db_models.VideoSegment(
+                video_id=video.id,
+                start_time=seg["start"],
+                end_time=seg["end"],
+                segment_type=seg["type"],
+                importance_score=seg.get("importance", 0.85),
+                keep=seg.get("keep", True),
+                suggested_action=seg.get("suggested_action", "ORIGINAL"),
+                broll_query=seg.get("broll_query"),
+                text_overlay=seg.get("text_overlay")
+            )
+            db.add(v_seg)
+
+        # Save Suggestions to DB
+        for sug in analysis_res["suggestions"]:
+            v_edit = db_models.VideoEdit(
+                video_id=video.id,
+                edit_type=sug["type"],
+                start_time=sug["start"],
+                end_time=sug["end"],
+                description=sug["description"],
+                status=sug.get("status", "SUGGESTED"),
+                configuration=sug
+            )
+            db.add(v_edit)
+
+        db.commit()
+
+        # Stage 3: Planning B-Roll & Hybrid Timeline
+        video.processing_stage = "Matching semantic B-roll & generating timeline..."
+        video.processing_progress = 85
+        db.commit()
+
+        import asyncio
+        editing_agent = HybridEditingAgent()
+        timeline_plan = asyncio.run(editing_agent.generate_hybrid_editing_plan(
+            analysis_data=analysis_res,
+            company_profile=company_info,
+            platform="Instagram Reels"
+        ))
+
+        # Save Master VideoRender entry
+        render_entry = db_models.VideoRender(
+            video_id=video.id,
+            render_type="MASTER",
+            aspect_ratio="9:16",
+            output_url=f"/renders/hybrid_master_{video.id}.mp4",
+            status="READY",
+            composition_data=timeline_plan,
+            provenance=timeline_plan.get("provenance", {})
+        )
+        db.add(render_entry)
+
+        # Stage 4: Ready for Studio Review
+        video.status = "READY"
+        video.processing_stage = "Analysis complete · Ready in Studio"
+        video.processing_progress = 100
+        db.commit()
+
+        log_audit("ANALYZE_HYBRID_VIDEO", "agent", f"Completed analysis and timeline for video ID {video.id}", db)
+
+    except Exception as e:
+        logger.error(f"Error processing hybrid video in background: {e}", exc_info=True)
+        try:
+            video = db.query(db_models.UploadedVideo).filter(db_models.UploadedVideo.id == video_id).first()
+            if video:
+                video.status = "FAILED"
+                video.processing_stage = f"Error: {str(e)}"
+                db.commit()
+        except Exception:
+            pass
+    finally:
+        db.close()
+
+
+@app.post("/api/hybrid/upload")
+async def upload_raw_video(
+    background_tasks: BackgroundTasks,
+    company_id: int = Form(1),
+    mode: str = Form("HYBRID"),
+    file: Optional[UploadFile] = File(None),
+    sample_mode: Optional[bool] = Form(False),
+    db: Session = Depends(get_db)
+):
+    upload_dir = "frontend/public/uploads"
+    os.makedirs(upload_dir, exist_ok=True)
+
+    if file and file.filename:
+        filename = file.filename
+        clean_name = os.path.basename(filename).replace(" ", "_")
+        target_path = os.path.join(upload_dir, f"{int(datetime.datetime.utcnow().timestamp())}_{clean_name}")
+        
+        with open(target_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        
+        file_size = os.path.getsize(target_path)
+        file_url = f"/uploads/{os.path.basename(target_path)}"
+    else:
+        # Sample mode or fallback
+        filename = "founder_product_explanation.mp4"
+        file_size = 14500000
+        file_url = "https://videos.pexels.com/video-files/3129671/3129671-hd_1920_1080_30fps.mp4"
+        target_path = file_url
+
+    # Create UploadedVideo record
+    uploaded_video = db_models.UploadedVideo(
+        company_id=company_id,
+        original_file=file_url,
+        filename=filename,
+        duration=68.0,
+        resolution="1080x1920",
+        aspect_ratio="9:16",
+        file_size=file_size,
+        mode=mode,
+        status="ANALYZING",
+        processing_stage="Extracting audio track...",
+        processing_progress=20
+    )
+    db.add(uploaded_video)
+    db.commit()
+    db.refresh(uploaded_video)
+
+    # Trigger async background job
+    background_tasks.add_task(process_hybrid_video_background, uploaded_video.id)
+
+    log_audit("UPLOAD_VIDEO", "user", f"Uploaded video {filename} for analysis", db)
+
+    return {
+        "video_id": uploaded_video.id,
+        "filename": filename,
+        "status": uploaded_video.status,
+        "processing_stage": uploaded_video.processing_stage,
+        "file_url": file_url,
+        "created_at": uploaded_video.created_at.isoformat()
+    }
+
+
+@app.get("/api/hybrid/status/{video_id}")
+async def get_hybrid_video_status(video_id: int, db: Session = Depends(get_db)):
+    video = db.query(db_models.UploadedVideo).filter(db_models.UploadedVideo.id == video_id).first()
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    checklist = [
+        {"stage": "Uploaded", "completed": True},
+        {"stage": "Extracting audio", "completed": video.processing_progress >= 30},
+        {"stage": "Transcribing speech", "completed": video.processing_progress >= 45},
+        {"stage": "Detecting scenes & pauses", "completed": video.processing_progress >= 60},
+        {"stage": "Finding highlights & hooks", "completed": video.processing_progress >= 75},
+        {"stage": "Planning semantic B-roll", "completed": video.processing_progress >= 90},
+        {"stage": "Ready in Studio", "completed": video.status == "READY"}
+    ]
+
+    return {
+        "video_id": video.id,
+        "filename": video.filename,
+        "status": video.status,
+        "stage": video.processing_stage,
+        "progress": video.processing_progress,
+        "checklist": checklist,
+        "duration": video.duration,
+        "aspect_ratio": video.aspect_ratio
+    }
+
+
+@app.get("/api/hybrid/analysis/{video_id}")
+async def get_hybrid_analysis(video_id: int, db: Session = Depends(get_db)):
+    video = db.query(db_models.UploadedVideo).filter(db_models.UploadedVideo.id == video_id).first()
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    transcript = db.query(db_models.VideoTranscript).filter(db_models.VideoTranscript.video_id == video.id).first()
+    segments = db.query(db_models.VideoSegment).filter(db_models.VideoSegment.video_id == video.id).all()
+    edits = db.query(db_models.VideoEdit).filter(db_models.VideoEdit.video_id == video.id).all()
+    render = db.query(db_models.VideoRender).filter(db_models.VideoRender.video_id == video.id).first()
+
+    analysis_service = VideoAnalysisService()
+    formatted_segments = [
+        {
+            "id": s.id,
+            "start": s.start_time,
+            "end": s.end_time,
+            "duration": round(s.end_time - s.start_time, 1),
+            "type": s.segment_type,
+            "importance": s.importance_score,
+            "keep": s.keep,
+            "suggested_action": s.suggested_action,
+            "broll_query": s.broll_query,
+            "text_overlay": s.text_overlay
+        } for s in segments
+    ]
+
+    hook_analysis = analysis_service.analyze_hooks_and_recommend(formatted_segments)
+    repurposed_clips = analysis_service.repurpose_into_multi_clips(
+        transcript.text if transcript else "", formatted_segments
+    )
+
+    return {
+        "video_id": video.id,
+        "filename": video.filename,
+        "original_file": video.original_file,
+        "metadata": {
+            "duration": video.duration,
+            "resolution": video.resolution,
+            "aspect_ratio": video.aspect_ratio,
+            "file_size": video.file_size
+        },
+        "transcript": {
+            "text": transcript.text if transcript else "",
+            "confidence": transcript.confidence if transcript else 0.95,
+            "words": transcript.words_json if transcript else []
+        },
+        "segments": formatted_segments,
+        "suggestions": [
+            {
+                "id": e.id,
+                "type": e.edit_type,
+                "start": e.start_time,
+                "end": e.end_time,
+                "description": e.description,
+                "status": e.status,
+                "configuration": e.configuration
+            } for e in edits
+        ],
+        "hook_analysis": hook_analysis,
+        "repurposed_clips": repurposed_clips,
+        "provenance": render.provenance if render else {
+            "original_footage_pct": 68,
+            "stock_broll_pct": 18,
+            "ai_graphics_pct": 9,
+            "ai_generated_pct": 5
+        },
+        "timeline_plan": render.composition_data if render else {}
+    }
+
+
+@app.put("/api/hybrid/suggestion/{edit_id}")
+async def update_hybrid_suggestion(edit_id: int, payload: SuggestionUpdateSchema, db: Session = Depends(get_db)):
+    edit = db.query(db_models.VideoEdit).filter(db_models.VideoEdit.id == edit_id).first()
+    if not edit:
+        raise HTTPException(status_code=404, detail="Suggestion not found")
+
+    edit.status = payload.status
+    db.commit()
+
+    log_audit("UPDATE_SUGGESTION", "user", f"Updated suggestion ID {edit_id} to {payload.status}", db)
+    return {"status": "SUCCESS", "edit_id": edit_id, "new_status": edit.status}
+
+
+@app.post("/api/hybrid/plan/{video_id}")
+async def generate_or_update_plan(video_id: int, plan_req: PlanRequestSchema, db: Session = Depends(get_db)):
+    video = db.query(db_models.UploadedVideo).filter(db_models.UploadedVideo.id == video_id).first()
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    company = db.query(db_models.Company).filter(db_models.Company.id == video.company_id).first()
+    company_info = {
+        "company_name": company.company_name if company else "FounderOS",
+        "industry": company.industry if company else "SaaS",
+        "brand_voice": company.brand_voice if company else "Authoritative"
+    }
+
+    transcript = db.query(db_models.VideoTranscript).filter(db_models.VideoTranscript.video_id == video.id).first()
+    segments = db.query(db_models.VideoSegment).filter(db_models.VideoSegment.video_id == video.id).all()
+    edits = db.query(db_models.VideoEdit).filter(db_models.VideoEdit.video_id == video.id).all()
+
+    analysis_data = {
+        "metadata": {"duration": video.duration, "aspect_ratio": video.aspect_ratio},
+        "segments": [
+            {
+                "start": s.start_time, "end": s.end_time, "type": s.segment_type,
+                "importance": s.importance_score, "keep": s.keep,
+                "suggested_action": s.suggested_action, "broll_query": s.broll_query,
+                "text_overlay": s.text_overlay
+            } for s in segments
+        ],
+        "transcription": {
+            "full_transcript": transcript.text if transcript else "",
+            "words": transcript.words_json if transcript else []
+        },
+        "suggestions": [{"type": e.edit_type, "status": e.status} for e in edits]
+    }
+
+    import asyncio
+    editing_agent = HybridEditingAgent()
+    timeline_plan = await editing_agent.generate_hybrid_editing_plan(
+        analysis_data=analysis_data,
+        company_profile=company_info,
+        platform=plan_req.platform or "Instagram Reels"
+    )
+
+    # Update or create VideoRender
+    render = db.query(db_models.VideoRender).filter(db_models.VideoRender.video_id == video.id).first()
+    if not render:
+        render = db_models.VideoRender(
+            video_id=video.id,
+            render_type="MASTER",
+            aspect_ratio="9:16",
+            output_url=f"/renders/hybrid_master_{video.id}.mp4",
+            status="READY",
+            composition_data=timeline_plan,
+            provenance=timeline_plan["provenance"]
+        )
+        db.add(render)
+    else:
+        render.composition_data = timeline_plan
+        render.provenance = timeline_plan["provenance"]
+    
+    db.commit()
+    return timeline_plan
+
+
+@app.post("/api/hybrid/render/{video_id}")
+async def render_hybrid_video(
+    video_id: int,
+    render_req: RenderRequestSchema,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    video = db.query(db_models.UploadedVideo).filter(db_models.UploadedVideo.id == video_id).first()
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    render = db.query(db_models.VideoRender).filter(db_models.VideoRender.video_id == video.id).first()
+    if not render or not render.composition_data:
+        raise HTTPException(status_code=400, detail="Editing timeline not generated yet")
+
+    config_dir = "frontend/public/configs"
+    os.makedirs(config_dir, exist_ok=True)
+    config_path = f"{config_dir}/hybrid_config_{video.id}.json"
+    
+    comp_data = dict(render.composition_data)
+    comp_data["original_video_url"] = video.original_file
+    
+    with open(config_path, "w") as f:
+        json.dump(comp_data, f, indent=2)
+
+    output_dir = "frontend/public/renders"
+    os.makedirs(output_dir, exist_ok=True)
+    output_path = f"{output_dir}/hybrid_render_{video.id}.mp4"
+
+    renderer = VideoRendererService()
+    
+    async def run_render():
+        await renderer.compile_hybrid_remotion_video(config_path, output_path, "Hybrid")
+
+    background_tasks.add_task(run_render)
+
+    render.output_url = f"/renders/hybrid_render_{video.id}.mp4"
+    render.status = "COMPLETED"
+    db.commit()
+
+    return {
+        "status": "COMPLETED",
+        "video_id": video.id,
+        "render_url": render.output_url,
+        "aspect_ratio": render_req.aspect_ratio or "9:16",
+        "platform": render_req.platform or "Instagram Reels",
+        "provenance": render.provenance,
+        "composition_data": comp_data
+    }
+
+
+@app.post("/api/hybrid/submit-approval/{video_id}")
+async def submit_hybrid_for_approval(video_id: int, db: Session = Depends(get_db)):
+    video = db.query(db_models.UploadedVideo).filter(db_models.UploadedVideo.id == video_id).first()
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    transcript = db.query(db_models.VideoTranscript).filter(db_models.VideoTranscript.video_id == video.id).first()
+    render = db.query(db_models.VideoRender).filter(db_models.VideoRender.video_id == video.id).first()
+
+    # Create or update ContentItem for the Human Approval queue
+    title = f"Hybrid Founder Video — {video.filename.replace('.mp4', '').replace('_', ' ').title()}"
+    content_item = db_models.ContentItem(
+        company_id=video.company_id,
+        type="Hybrid Video (Founder + AI)",
+        platform="Instagram",
+        status="PENDING_APPROVAL",
+        scheduled_time=datetime.datetime.utcnow() + datetime.timedelta(days=1),
+        title=title
+    )
+    db.add(content_item)
+    db.commit()
+    db.refresh(content_item)
+
+    # Attach script
+    hook_text = "Most SaaS founders lose over 60% of users right after sign-up."
+    script_obj = db_models.Script(
+        content_item_id=content_item.id,
+        script_text=transcript.text if transcript else "Founder authentic explanation augmented with B-roll.",
+        hook=hook_text,
+        problem="Onboarding drop-offs bleed ad spend without notice.",
+        solution="Automated AI onboarding workflow cuts time to value by 80%.",
+        cta="Comment Playbook below or tap the link in bio for the free blueprint.",
+        caption="Stop scaling brute-force. How we fixed step-2 onboarding churn and grew retention 40%. 👇",
+        hashtags=["FounderLife", "SaaSGrowth", "HybridVideo", "FounderOS"],
+        duration=int(video.duration or 65),
+        voice_gender="BRAND"
+    )
+    db.add(script_obj)
+
+    # Attach VideoAsset for backward-compatibility in existing approval cards
+    storyboard = []
+    if render and render.composition_data:
+        tracks = render.composition_data.get("tracks", {})
+        for b in tracks.get("broll", []):
+            storyboard.append({
+                "scene_index": len(storyboard) + 1,
+                "visual_url": b.get("url", ""),
+                "text_overlay": b.get("text_overlay", "Supporting B-Roll"),
+                "duration": b.get("duration", 5)
+            })
+
+    video_asset = db_models.VideoAsset(
+        content_item_id=content_item.id,
+        video_url=render.output_url if render else video.original_file,
+        storyboard=storyboard,
+        voiceover_url="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"
+    )
+    db.add(video_asset)
+
+    if render:
+        render.content_item_id = content_item.id
+    
+    db.commit()
+    log_audit("SUBMIT_HYBRID_APPROVAL", "user", f"Submitted hybrid video {video_id} to Approval Hub as ContentItem {content_item.id}", db)
+
+    return {
+        "status": "SUBMITTED",
+        "content_item_id": content_item.id,
+        "title": content_item.title,
+        "provenance": render.provenance if render else {}
+    }
 
 
 # --- Webhooks Simulator ---

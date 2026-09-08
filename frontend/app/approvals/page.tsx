@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { 
   Check, 
   Linkedin, 
@@ -8,9 +9,9 @@ import {
   Youtube, 
   Facebook, 
   RefreshCw, 
-  X,
-  FileText,
-  AlertCircle
+  X, 
+  FileText, 
+  AlertCircle 
 } from "lucide-react";
 
 interface ContentItem {
@@ -28,7 +29,9 @@ interface ContentItem {
 }
 
 export default function ApprovalCenter() {
+  const router = useRouter();
   const [items, setItems] = useState<ContentItem[]>([]);
+
   const [loading, setLoading] = useState(true);
   const [actioningId, setActioningId] = useState<number | null>(null);
   const [actionStatus, setActionStatus] = useState("");
@@ -44,8 +47,21 @@ export default function ApprovalCenter() {
       const pending = data.filter((i: any) => i.status === "PENDING_APPROVAL" || i.status === "DRAFT");
       setItems(pending);
     } catch (err) {
-      // Mock Fallbacks
+      // Mock Fallbacks with rich Hybrid Video creation item
       const mockApprovals: ContentItem[] = [
+        {
+          id: 101,
+          title: "Hybrid Founder Video — Product Churn Explanation",
+          type: "Hybrid Video (Founder + AI)",
+          platform: "Instagram",
+          status: "PENDING_APPROVAL",
+          scheduled_time: "Today 5pm",
+          script: {
+            text: "Most SaaS founders lose over sixty percent of their users right after sign-up. We analyzed 500 sessions and discovered 60% of churn happens on step two. Our retention grew 40% in 90 days. Comment Playbook below.",
+            caption: "Stop scaling brute-force. How we fixed step-2 onboarding churn and grew retention 40%. 👇",
+            hashtags: ["FounderLife", "SaaSGrowth", "HybridVideo", "FounderOS"]
+          }
+        },
         {
           id: 1,
           title: "Founder's Journey — LinkedIn",
@@ -70,19 +86,6 @@ export default function ApprovalCenter() {
             text: "30-second automation that saves 15 hours a week. Here's exactly how we built it.",
             caption: "Fail fast, but fix structural limits immediately. 🚀",
             hashtags: ["Startup", "FounderLife", "Reels"]
-          }
-        },
-        {
-          id: 3,
-          title: "Customer Success — YouTube Shorts",
-          type: "Case Study",
-          platform: "YouTube",
-          status: "PENDING_APPROVAL",
-          scheduled_time: "Fri 2pm",
-          script: {
-            text: "How Acme Corp cut reporting time by 80%. This is what happened when they automated their workflows.",
-            caption: "Scaling SaaS secrets. 👇",
-            hashtags: ["SaaS", "Acme", "Automation"]
           }
         }
       ];
@@ -160,7 +163,7 @@ export default function ApprovalCenter() {
       </div>
 
       {actionStatus && (
-        <div className="bg-[#EEEDFE] border border-[#534AB7]/25 p-3 rounded-lg text-xs text-[#534AB7] animate-pulse">
+        <div className="bg-[var(--color-background-info)] border border-[var(--color-border-info)] p-3 rounded-lg text-xs text-[var(--color-text-info)] font-bold animate-pulse shadow-xs">
           {actionStatus}
         </div>
       )}
@@ -188,20 +191,63 @@ export default function ApprovalCenter() {
                 const { Icon, color } = getPlatformIcon(item.platform);
                 const isWorking = actioningId === item.id;
                 
+                const isHybrid = item.type.includes("Hybrid");
+                
                 return (
                   <div key={item.id} className="approval-item py-4">
                     <div className={`approval-thumb border ${color}`}>
                       <Icon className="w-6 h-6" />
                     </div>
                     <div className="approval-body">
-                      <div className="approval-title">{item.title}</div>
-                      <div className="approval-meta">
-                        Week 1 · {item.type} · 60s · Female voice · Scheduled {item.scheduled_time}
+                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                        <span className="approval-title">{item.title}</span>
+                        {isHybrid ? (
+                          <span className="bg-gradient-to-r from-[#534AB7] to-[#7c3aed] text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-xs">
+                            ⚡ Hybrid Mode (Founder + AI)
+                          </span>
+                        ) : (
+                          <span className="pill pill-info text-[10px]">{item.type}</span>
+                        )}
                       </div>
+
+                      <div className="approval-meta mb-2">
+                        Week 1 · {item.platform} · {isHybrid ? "68s" : "60s"} · {isHybrid ? "Authentic Founder Voice" : "ElevenLabs Voiceover"} · Scheduled {item.scheduled_time}
+                      </div>
+
+                      {/* Content Provenance Transparency Bar (Only for Hybrid videos) */}
+                      {isHybrid && (
+                        <div className="bg-[#534AB7]/5 border border-[#534AB7]/20 rounded-xl p-3 mb-3 space-y-2">
+                          <div className="flex items-center justify-between text-[11px] font-bold text-[var(--color-text-primary)]">
+                            <span>Content Provenance & Transparency</span>
+                            <span className="text-[#0F6E56]">68% Authentic Footage Preserved</span>
+                          </div>
+                          <div className="w-full h-2 rounded-full bg-slate-200 overflow-hidden flex">
+                            <div style={{ width: "68%" }} className="bg-[#534AB7] h-full" title="Original Founder: 68%" />
+                            <div style={{ width: "18%" }} className="bg-[#0F6E56] h-full" title="Stock B-Roll: 18%" />
+                            <div style={{ width: "9%" }} className="bg-[#D97706] h-full" title="Motion Graphics: 9%" />
+                            <div style={{ width: "5%" }} className="bg-[#9333EA] h-full" title="AI Branding: 5%" />
+                          </div>
+                          <div className="text-[10px] text-[var(--color-text-secondary)] flex flex-wrap items-center gap-x-3 gap-y-1">
+                            <span><b>68%</b> Founder Video</span>
+                            <span>·</span>
+                            <span><b>18%</b> Pexels B-Roll</span>
+                            <span>·</span>
+                            <span><b>9%</b> Motion Graphics</span>
+                            <span>·</span>
+                            <span><b>5%</b> AI Visuals</span>
+                          </div>
+                          <div className="text-[10px] text-[#0F6E56] font-medium pt-1 border-t border-[#534AB7]/10 flex flex-wrap gap-2">
+                            <span>✓ 1.2s silence removed</span>
+                            <span>✓ Filler &quot;Um&quot; trimmed</span>
+                            <span>✓ 2 semantic B-roll cutaways</span>
+                            <span>✓ Animated +40% Retention card added</span>
+                          </div>
+                        </div>
+                      )}
                       
                       {item.script && (
                         <div className="text-[11px] text-[var(--color-text-secondary)] mb-3 bg-[var(--color-background-secondary)] p-2.5 rounded border border-[var(--color-border-tertiary)] italic leading-relaxed">
-                          "{item.script.text}"
+                          &quot;{item.script.text}&quot;
                         </div>
                       )}
 
@@ -221,11 +267,10 @@ export default function ApprovalCenter() {
                           <X className="w-3.5 h-3.5" /> Reject
                         </button>
                         <button
-                          onClick={() => alert(`Prompt sent: Edit the ${item.platform} script for "${item.title}"`)}
-                          disabled={isWorking}
-                          className="btn flex items-center gap-1"
+                          onClick={() => router.push(`/studio?item_id=${item.id}`)}
+                          className="btn flex items-center gap-1 font-semibold"
                         >
-                          <FileText className="w-3.5 h-3.5 text-[#534AB7]" /> Edit script ↗
+                          <FileText className="w-3.5 h-3.5 text-[#534AB7]" /> Open in Studio ↗
                         </button>
                       </div>
                     </div>

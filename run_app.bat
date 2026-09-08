@@ -44,4 +44,5 @@ echo GraphQL API: http://localhost:8000/graphql
 echo.
 echo Press any key to exit this launcher (servers will keep running).
 echo ==============================================================
-pause > null
+pause > nul
+
