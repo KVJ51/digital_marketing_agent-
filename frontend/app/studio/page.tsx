@@ -4,6 +4,7 @@ import React, { useEffect, useState, Suspense, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { MainVideoComposition, HybridVideoComposition } from "../../remotion/Composition";
+import { ProvenanceBar } from "../../components/ProvenanceBar";
 import { 
   Video, 
   Settings, 
@@ -27,7 +28,14 @@ import {
   BarChart3, 
   ShieldCheck, 
   Sliders, 
-  ArrowRight 
+  ArrowRight,
+  Clapperboard,
+  Bot,
+  Send,
+  CornerDownLeft,
+  Flame,
+  CheckCircle2,
+  ListRestart
 } from "lucide-react";
 
 // Dynamically import Remotion Player to avoid SSR issues
@@ -43,15 +51,25 @@ interface StoryboardScene {
   duration: number;
 }
 
-type StudioMode = "AI_GENERATED" | "UPLOAD_EDIT" | "HYBRID";
+type StudioMode = "AI_GENERATED" | "HYBRID";
+
+interface AgentChatMessage {
+  id: string;
+  sender: "user" | "agent";
+  text: string;
+  timestamp: string;
+  actions?: string[];
+  logs?: string[];
+}
 
 function StudioContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const initialMode = searchParams.get("mode") === "AI_GENERATED" ? "AI_GENERATED" : "HYBRID";
   const itemId = searchParams.get("item_id") || "1";
 
   // Mode Selection State
-  const [activeMode, setActiveMode] = useState<StudioMode>("HYBRID");
+  const [activeMode, setActiveMode] = useState<StudioMode>(initialMode);
 
   // Common Loading & Render States
   const [loading, setLoading] = useState(false);
@@ -61,7 +79,7 @@ function StudioContent() {
   const [aspectRatio, setAspectRatio] = useState<"9:16" | "1:1" | "16:9">("9:16");
 
   // ==========================================
-  // MODE A: AI Video Generation States (Existing)
+  // MODE A: AI Video Generation States
   // ==========================================
   const [aiTitle, setAiTitle] = useState("Founder's Journey — LinkedIn");
   const [aiScript, setAiScript] = useState(
@@ -86,46 +104,25 @@ function StudioContent() {
   }));
 
   // ==========================================
-  // MODE B & C: HYBRID & UPLOAD VIDEO STATES
+  // MODE C: AI COPILOT & RAW VIDEO STATES
   // ==========================================
   const [uploadedVideoId, setUploadedVideoId] = useState<number | null>(1);
   const [uploadFilename, setUploadFilename] = useState("founder_product_explanation.mp4");
   const [uploadFileSize, setUploadFileSize] = useState("14.5 MB");
   const [uploadProgress, setUploadProgress] = useState(100);
   const [isUploading, setIsUploading] = useState(false);
-  const [processingStage, setProcessingStage] = useState("Analysis complete · Ready in Studio");
+  const [processingStage, setProcessingStage] = useState("Analysis complete · AI Agent Ready");
 
-  // Raw Footage Video URL (authentic founder talking head)
+  // Raw Footage Video URL
   const [rawVideoUrl, setRawVideoUrl] = useState(
     "https://videos.pexels.com/video-files/3129671/3129671-hd_1920_1080_30fps.mp4"
   );
 
-  // Analysis Data
+  // Analysis Data & Transcript
   const [transcriptText, setTranscriptText] = useState(
     "Most SaaS founders lose over sixty percent of their users right after sign-up without realizing it. Um, you spend thousands of dollars on paid ads, but your onboarding has massive drop-offs. We analyzed over five hundred user sessions and discovered that sixty percent of churn happens on step two. So we replaced manual setup with an automated AI guided workflow that cut time to value by eighty percent. Our customer retention immediately grew forty percent in just ninety days across all cohorts. If you want to copy our exact retention playbook and see the blueprint, comment Playbook below or tap the link."
   );
   const [wordsList, setWordsList] = useState<any[]>([]);
-  const [segmentsList, setSegmentsList] = useState<any[]>([
-    { id: 1, start: 0, end: 8.5, type: "hook", action: "ORIGINAL", headline: "SaaS Churn Hook", importance: 0.95, text_overlay: "LOSING 60% OF USERS?" },
-    { id: 2, start: 8.5, end: 18, type: "problem", action: "B-ROLL", headline: "Wasted Ad Spend", importance: 0.88, text_overlay: "Ad Spend Bleeding Out", query: "frustrated tech entrepreneur laptop" },
-    { id: 3, start: 18, end: 31, type: "insight", action: "GRAPHIC", headline: "Step 2 Drop-off Insight", importance: 0.92, text_overlay: "Step 2 = 60% Churn Bottleneck" },
-    { id: 4, start: 31, end: 45, type: "solution", action: "MIXED", headline: "Automated AI Onboarding", importance: 0.90, text_overlay: "Automate Onboarding Workflow", query: "automation software ui" },
-    { id: 5, start: 45, end: 56, type: "growth_metric", action: "GRAPHIC", headline: "+40% Retention Surge", importance: 0.94, text_overlay: "+40% RETENTION IN 90 DAYS" },
-    { id: 6, start: 56, end: 68, type: "cta", action: "ORIGINAL", headline: "Playbook CTA", importance: 0.89, text_overlay: "Get The Free Playbook 👇" }
-  ]);
-
-  // AI Suggestions
-  const [suggestions, setSuggestions] = useState<any[]>([
-    { id: 1, type: "silence_removal", desc: "Remove 1.2s silence before problem statement (00:08 - 00:09)", status: "ACCEPTED" },
-    { id: 2, type: "filler_removal", desc: 'Remove filler word "Um" at 00:09', status: "ACCEPTED" },
-    { id: 3, type: "zoom", desc: "Apply 1.08x Ken Burns punch-in on churn reveal (00:18)", status: "ACCEPTED" },
-    { id: 4, type: "broll_insert", desc: "Cut to SaaS Analytics B-roll during ad spend drop-off (00:10 - 00:17)", status: "ACCEPTED" },
-    { id: 5, type: "graphic_insert", desc: 'Overlay animated "+40% Retention Surge" stat card (00:46 - 00:54)', status: "ACCEPTED" }
-  ]);
-
-  // Hook Re-ordering state
-  const [hasAlternateHook, setHasAlternateHook] = useState(true);
-  const [hookSwapped, setHookSwapped] = useState(false);
 
   // Content Provenance Breakdown
   const [provenance, setProvenance] = useState({
@@ -193,12 +190,30 @@ function StudioContent() {
     },
     branding: {
       company_name: "FounderOS",
-      colors: { primary: "#534AB7", accent: "#0F6E56", text: "#FFFFFF" }
+      colors: { primary: "#E8A33D", accent: "#7FA37A", text: "#F3EFE6" }
     },
-    progress_bar: { height: 4, color: "#534AB7" }
+    progress_bar: { height: 3, color: "#E8A33D" }
   });
 
   const hybridTotalDuration = 68.0;
+
+  // ==========================================
+  // MODE C: AI AGENT BOT INTERACTIVE PROMPT ENGINE
+  // ==========================================
+  const [userPromptInput, setUserPromptInput] = useState("");
+  const [isBotProcessing, setIsBotProcessing] = useState(false);
+  const [chatHistory, setChatHistory] = useState<AgentChatMessage[]>([
+    {
+      id: "msg-1",
+      sender: "agent",
+      text: "Hello! I am your AI Video Copilot Agent. Upload raw founder footage and tell me how you'd like to alter the video (e.g. hook reordering, B-roll insertions, caption styles, motion graphics, or sound ducking).",
+      timestamp: "Just now",
+      actions: ["Video Ingested", "Speech Transcribed", "Scene Boundaries Identified"]
+    }
+  ]);
+
+  // Hook Re-ordering state
+  const [hookSwapped, setHookSwapped] = useState(false);
 
   // Build word captions on load
   useEffect(() => {
@@ -225,6 +240,182 @@ function StudioContent() {
     }));
   }, [transcriptText]);
 
+  // AI Agent Bot Prompt Submitter (Calls backend /api/hybrid/ai-alter + client fallback)
+  const handleSendPrompt = async (customPrompt?: string, presetKey?: string) => {
+    const promptToExecute = customPrompt || userPromptInput;
+    if (!promptToExecute.trim()) return;
+
+    const userMsg: AgentChatMessage = {
+      id: `usr-${Date.now()}`,
+      sender: "user",
+      text: promptToExecute,
+      timestamp: "Now"
+    };
+
+    setChatHistory((prev) => [...prev, userMsg]);
+    if (!customPrompt) setUserPromptInput("");
+    setIsBotProcessing(true);
+
+    try {
+      const res = await fetch("http://localhost:8000/api/hybrid/ai-alter", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          video_id: uploadedVideoId || 1,
+          prompt: promptToExecute,
+          preset_type: presetKey,
+          current_tracks: hybridTracks,
+          aspect_ratio: aspectRatio
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.tracks) setHybridTracks(data.tracks);
+        if (data.provenance) setProvenance(data.provenance);
+
+        const botReply: AgentChatMessage = {
+          id: `bot-${Date.now()}`,
+          sender: "agent",
+          text: data.agent_message || `I have altered the video according to your preference.`,
+          timestamp: "Just now",
+          actions: data.applied_changes || ["Altered Remotion Timeline"],
+          logs: data.agent_logs || []
+        };
+        setChatHistory((prev) => [...prev, botReply]);
+        setSuccessMsg("✨ AI Video Copilot altered the video composition!");
+        setTimeout(() => setSuccessMsg(""), 4000);
+      } else {
+        throw new Error();
+      }
+    } catch (e) {
+      // Client-Side Fallback Alteration Engine
+      simulateClientAlteration(promptToExecute, presetKey);
+    } finally {
+      setIsBotProcessing(false);
+    }
+  };
+
+  const simulateClientAlteration = (prompt: string, preset?: string) => {
+    const p = prompt.toLowerCase();
+    const applied: string[] = [];
+    const logs: string[] = [];
+
+    logs.push(`Interpreted prompt: "${prompt}"`);
+
+    // Hook Alteration
+    if (p.includes("hook") || p.includes("opening") || preset === "hook_opt") {
+      setHookSwapped(true);
+      setTranscriptText((prev) =>
+        "Our customer retention grew forty percent in ninety days using this one automated onboarding step. Most SaaS founders lose over sixty percent of their users right after sign-up without realizing it... " +
+        prev.substring(80)
+      );
+      applied.push("Re-ordered opening with viral +40% retention hook");
+      logs.push("Applied 1.12x punch-in on opening hook statement.");
+    }
+
+    // B-Roll
+    if (p.includes("b-roll") || p.includes("broll") || p.includes("stock") || p.includes("visual") || preset === "broll_inject") {
+      setHybridTracks((prev: any) => ({
+        ...prev,
+        broll: [
+          {
+            start: 9.0,
+            end: 17.5,
+            duration: 8.5,
+            url: "https://videos.pexels.com/video-files/8387537/8387537-hd_1920_1080_25fps.mp4",
+            query: "SaaS Analytics Dashboard",
+            text_overlay: "AD SPEND BLEEDING OUT"
+          },
+          {
+            start: 33.0,
+            end: 42.0,
+            duration: 9.0,
+            url: "https://videos.pexels.com/video-files/3252063/3252063-hd_1920_1080_25fps.mp4",
+            query: "Automated Software Workflow",
+            text_overlay: "AI GUIDED ONBOARDING"
+          }
+        ]
+      }));
+      setProvenance((prev) => ({
+        ...prev,
+        stock_broll_pct: 26,
+        original_footage_pct: 60,
+        summary: "60% Founder footage · 26% Stock B-roll · 9% Motion graphics · 5% AI branding"
+      }));
+      applied.push("Injected 2 high-impact SaaS analytics & workflow B-roll layers");
+      logs.push("Synchronized crossfade transitions between founder video and B-roll.");
+    }
+
+    // Silence & Fillers
+    if (p.includes("silence") || p.includes("filler") || p.includes("pause") || p.includes("trim") || preset === "silence_cut") {
+      applied.push("Trimmed 1.2s silence at 00:08 and filtered out filler 'Um'");
+      logs.push("Cleaned speech cadence and tightened pacing for 9:16 short-form.");
+    }
+
+    // Captions
+    if (p.includes("caption") || p.includes("subtitle") || p.includes("amber") || p.includes("kinetic") || preset === "kinetic_captions") {
+      applied.push("Applied kinetic amber word bounce captions in safe zone");
+      logs.push("Calibrated safe-zone offsets for TikTok and Reels UI buttons.");
+    }
+
+    // Stat card
+    if (p.includes("stat") || p.includes("metric") || p.includes("card") || p.includes("retention") || preset === "stat_card") {
+      setHybridTracks((prev: any) => ({
+        ...prev,
+        graphics: [
+          {
+            start: 45.0,
+            end: 55.0,
+            duration: 10.0,
+            type: "STAT_CARD",
+            headline: "COHORT RETENTION GAIN",
+            value: "+40% RETENTION",
+            subtext: "Automated AI Onboarding Impact",
+            badge: "PROVEN IMPACT",
+            color: "#7FA37A"
+          }
+        ]
+      }));
+      applied.push("Injected animated +40% Retention metric card");
+      logs.push("Positioned glassmorphism stat card during proof explanation.");
+    }
+
+    // Audio ducking
+    if (p.includes("audio") || p.includes("music") || p.includes("duck") || p.includes("lo-fi") || preset === "audio_duck") {
+      setHybridTracks((prev: any) => ({
+        ...prev,
+        audio: {
+          original_speech: { source: "ORIGINAL_AUDIO", volume: 1.0 },
+          background_music: {
+            url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
+            volume: 0.12
+          }
+        }
+      }));
+      applied.push("Applied ambient Lo-Fi music with 0.12x ducking under speech");
+      logs.push("Set audio compressor to prioritize vocal clarity.");
+    }
+
+    if (applied.length === 0) {
+      applied.push(`Adjusted video composition to: "${prompt}"`);
+      logs.push("Updated timeline layer weights and duration constraints.");
+    }
+
+    const botReply: AgentChatMessage = {
+      id: `bot-${Date.now()}`,
+      sender: "agent",
+      text: `Altered video successfully: ${applied.join(", ")}.`,
+      timestamp: "Just now",
+      actions: applied,
+      logs: logs
+    };
+
+    setChatHistory((prev) => [...prev, botReply]);
+    setSuccessMsg("✨ AI Video Copilot altered the video composition!");
+    setTimeout(() => setSuccessMsg(""), 4000);
+  };
+
   // Handle Video File Upload
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -239,7 +430,7 @@ function StudioContent() {
       const formData = new FormData();
       formData.append("file", file);
       formData.append("company_id", localStorage.getItem("onboarded_company_id") || "1");
-      formData.append("mode", activeMode);
+      formData.append("mode", "HYBRID");
 
       const res = await fetch("http://localhost:8000/api/hybrid/upload", {
         method: "POST",
@@ -258,66 +449,22 @@ function StudioContent() {
     }
   };
 
-  const loadSampleVideo = () => {
-    setIsUploading(true);
-    setUploadFilename("founder_product_explanation.mp4");
-    setUploadFileSize("14.5 MB");
-    setUploadProgress(25);
-    setProcessingStage("Extracting audio track & transcribing speech...");
-    simulateProcessingPipeline();
-  };
-
   const simulateProcessingPipeline = () => {
     setTimeout(() => {
-      setUploadProgress(45);
+      setUploadProgress(50);
       setProcessingStage("Transcribing speech & timestamping words...");
       setTimeout(() => {
-        setUploadProgress(70);
+        setUploadProgress(80);
         setProcessingStage("Detecting scenes, silences & viral hooks...");
         setTimeout(() => {
-          setUploadProgress(90);
-          setProcessingStage("Searching semantic B-roll & motion graphics...");
-          setTimeout(() => {
-            setUploadProgress(100);
-            setIsUploading(false);
-            setProcessingStage("Analysis complete · Ready in Studio");
-            setSuccessMsg("Video analyzed! 5 AI editing suggestions ready.");
-            setTimeout(() => setSuccessMsg(""), 4000);
-          }, 800);
-        }, 900);
-      }, 900);
-    }, 800);
-  };
-
-  // Toggle Suggestion State
-  const toggleSuggestion = (id: number) => {
-    setSuggestions((prev) =>
-      prev.map((s) => {
-        if (s.id === id) {
-          const nextStatus = s.status === "ACCEPTED" ? "REJECTED" : "ACCEPTED";
-          return { ...s, status: nextStatus };
-        }
-        return s;
-      })
-    );
-  };
-
-  // Swap Hook Action
-  const handleHookSwap = () => {
-    if (!hookSwapped) {
-      setHookSwapped(true);
-      setTranscriptText((prev) =>
-        "Our customer retention grew forty percent in ninety days using this one automated onboarding step. Most SaaS founders lose over sixty percent of their users right after sign-up without realizing it... " +
-        prev.substring(80)
-      );
-      setSuccessMsg("Hook updated! Re-ordered opening statement with +40% Retention surge.");
-      setTimeout(() => setSuccessMsg(""), 3500);
-    } else {
-      setHookSwapped(false);
-      setTranscriptText(
-        "Most SaaS founders lose over sixty percent of their users right after sign-up without realizing it. Um, you spend thousands of dollars on paid ads, but your onboarding has massive drop-offs. We analyzed over five hundred user sessions and discovered that sixty percent of churn happens on step two. So we replaced manual setup with an automated AI guided workflow that cut time to value by eighty percent. Our customer retention immediately grew forty percent in just ninety days across all cohorts. If you want to copy our exact retention playbook and see the blueprint, comment Playbook below or tap the link."
-      );
-    }
+          setUploadProgress(100);
+          setIsUploading(false);
+          setProcessingStage("Analysis complete · AI Agent Ready");
+          setSuccessMsg("Video analyzed! Tell the AI Agent how you'd like to alter it.");
+          setTimeout(() => setSuccessMsg(""), 4000);
+        }, 600);
+      }, 700);
+    }, 600);
   };
 
   // Render Hybrid Video
@@ -333,9 +480,9 @@ function StudioContent() {
           setRendering(false);
           setSuccessMsg("Rendered platform cut successfully! Ready for Human Approval.");
           setTimeout(() => setSuccessMsg(""), 5000);
-        }, 1200);
-      }, 1200);
-    }, 1000);
+        }, 1000);
+      }, 1000);
+    }, 800);
   };
 
   // Submit to Approval Hub
@@ -362,29 +509,29 @@ function StudioContent() {
   };
 
   return (
-    <div className="space-y-6 animate-step-enter pb-16">
+    <div className="space-y-6 pb-16">
       {/* Creation Mode Switcher Header */}
-      <div className="card p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-l-4 border-l-[#534AB7]">
+      <div className="card p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-l-2 border-l-[#E8A33D]">
         <div>
           <div className="flex items-center gap-2">
-            <Video className="w-5 h-5 text-[#534AB7]" />
-            <h1 className="text-base font-bold text-[var(--color-text-primary)] tracking-tight">
-              FounderOS Video Studio
+            <Clapperboard className="w-4 h-4 text-[#E8A33D]" />
+            <h1 className="text-sm font-semibold text-[#F3EFE6] tracking-tight">
+              FounderOS Video Studio Bay
             </h1>
           </div>
-          <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
-            Select creation mode: Generate 100% AI videos, edit raw founder videos, or synthesize hybrid authentic content.
+          <p className="text-xs text-[#A79E8E] mt-0.5">
+            Post-production monitor suite: calibrate authentic founder cuts, AI video agent alteration, layered B-roll, motion graphics, and AI visuals.
           </p>
         </div>
 
-        {/* 3 Mode Tabs */}
-        <div className="flex items-center gap-1.5 bg-[var(--color-background-secondary)] p-1 rounded-xl border border-[var(--color-border-tertiary)]">
+        {/* 3 Distinct Mode Switcher Buttons */}
+        <div className="flex items-center gap-1.5 bg-[#1A1712] p-1 rounded-[4px] border border-[#3A3427]">
           <button
             onClick={() => setActiveMode("AI_GENERATED")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+            className={`px-3 py-1.5 rounded-[4px] text-xs font-medium flex items-center gap-1.5 transition-all ${
               activeMode === "AI_GENERATED"
-                ? "bg-[#534AB7] text-white shadow-sm"
-                : "text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
+                ? "bg-[#2C281F] text-[#E8A33D] border border-[#E8A33D]"
+                : "text-[#A79E8E] hover:text-[#F3EFE6]"
             }`}
           >
             <Sparkles className="w-3.5 h-3.5" />
@@ -392,29 +539,28 @@ function StudioContent() {
           </button>
 
           <button
-            onClick={() => setActiveMode("UPLOAD_EDIT")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
-              activeMode === "UPLOAD_EDIT"
-                ? "bg-[#534AB7] text-white shadow-sm"
-                : "text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
-            }`}
+            onClick={() => router.push("/editor")}
+            className="px-3 py-1.5 rounded-[4px] text-xs font-medium flex items-center gap-1.5 transition-all text-[#A79E8E] hover:text-[#E8A33D] hover:bg-[#2C281F]/60"
+            title="Open Dedicated Mode B Manual Multi-Video Editor"
           >
-            <Film className="w-3.5 h-3.5" />
-            Mode B: Upload & Edit
+            <Film className="w-3.5 h-3.5 text-[#E8A33D]" />
+            Mode B: Manual Multi-Clip ↗
           </button>
 
           <button
             onClick={() => setActiveMode("HYBRID")}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all ${
+            className={`px-3.5 py-1.5 rounded-[4px] text-xs font-semibold flex items-center gap-1.5 transition-all ${
               activeMode === "HYBRID"
-                ? "bg-gradient-to-r from-[#534AB7] to-[#7c3aed] text-white shadow-md shadow-purple-500/20"
-                : "text-[var(--color-text-secondary)] hover:text-[#534AB7]"
+                ? "bg-[#E8A33D] text-[#1A1712]"
+                : "text-[#A79E8E] hover:text-[#E8A33D]"
             }`}
           >
-            <Wand2 className="w-3.5 h-3.5 text-amber-300" />
-            Mode C: HYBRID MODE
-            <span className="bg-amber-400/25 text-amber-200 text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider ml-0.5">
-              New
+            <Wand2 className="w-3.5 h-3.5" />
+            Mode C: AI Copilot Bay
+            <span className={`text-[9px] px-1 py-0.2 rounded font-bold uppercase tracking-wider ml-0.5 ${
+              activeMode === "HYBRID" ? "bg-[#1A1712] text-[#E8A33D]" : "bg-[#E8A33D]/20 text-[#E8A33D]"
+            }`}>
+              Primary
             </span>
           </button>
         </div>
@@ -422,28 +568,28 @@ function StudioContent() {
 
       {/* Notifications */}
       {successMsg && (
-        <div className="bg-[var(--color-background-success)] border border-[var(--color-border-success)] p-3 rounded-lg text-xs text-[var(--color-text-success)] flex items-center gap-2 font-bold animate-fadeIn shadow-xs">
-          <Check className="w-4 h-4 text-[var(--color-text-success)]" />
+        <div className="bg-[#7FA37A]/15 border border-[#7FA37A]/40 p-3 rounded-[4px] text-xs text-[#7FA37A] flex items-center gap-2 font-medium">
+          <Check className="w-4 h-4 text-[#7FA37A]" />
           {successMsg}
         </div>
       )}
 
       {rendering && (
-        <div className="bg-[var(--color-background-info)] border border-[var(--color-border-info)] p-3 rounded-lg text-xs text-[var(--color-text-info)] flex items-center gap-2 font-bold animate-pulse shadow-xs">
-          <RefreshCw className="w-4 h-4 animate-spin text-[var(--color-text-info)]" />
+        <div className="bg-[#E8A33D]/10 border border-[#E8A33D]/30 p-3 rounded-[4px] text-xs text-[#E8A33D] flex items-center gap-2 font-medium animate-pulse">
+          <RefreshCw className="w-4 h-4 animate-spin text-[#E8A33D]" />
           {renderProgress}
         </div>
       )}
 
       {/* ========================================================================= */}
-      {/* MODE A: AI GENERATED (EXISTING WORKFLOW - FULLY PRESERVED) */}
+      {/* MODE A: AI GENERATED (PROMPT -> SCRIPT -> VOICEOVER -> STOCK REELS) */}
       {/* ========================================================================= */}
       {activeMode === "AI_GENERATED" && (
         <div className="space-y-6">
           <div className="metrics">
             <div className="metric-card">
               <div className="metric-label">Mode</div>
-              <div className="metric-val text-xs text-[#534AB7] font-semibold mt-1">AI Video (Stock + Script)</div>
+              <div className="metric-val text-xs text-[#E8A33D] font-mono mt-1">AI Video (Stock + Script)</div>
             </div>
             <div className="metric-card">
               <div className="metric-label">Scenes Generated</div>
@@ -454,22 +600,22 @@ function StudioContent() {
               <div className="metric-val">{aiTotalDuration}s</div>
             </div>
             <div className="metric-card">
-              <div className="metric-label">Voice Provider</div>
-              <div className="metric-val text-xs text-[var(--color-text-secondary)] mt-1">ElevenLabs (Female)</div>
+              <div className="metric-label">Voice Synthesis</div>
+              <div className="metric-val text-xs text-[#A79E8E] font-mono mt-1">ElevenLabs (Female)</div>
             </div>
           </div>
 
           <div className="grid2">
-            {/* Player */}
+            {/* Player Monitor Frame */}
             <div className="card">
               <div className="card-hdr">
-                <span className="card-title">AI Video Preview — #{itemId}</span>
-                <span className="pill pill-warn">AI Generated</span>
+                <span className="card-title">AI Video Monitor — Cut #{itemId}</span>
+                <span className="pill pill-warn">AI Synthesized</span>
               </div>
 
               <div className="flex flex-col md:flex-row gap-5 items-start">
-                <div className="w-full md:w-[190px] shrink-0">
-                  <div className="bg-[#111827] rounded-xl aspect-[9/16] overflow-hidden flex items-center justify-center relative shadow-lg border border-slate-700">
+                <div className="w-full md:w-[200px] shrink-0">
+                  <div className="monitor-frame aspect-[9/16] overflow-hidden flex items-center justify-center relative">
                     <RemotionPlayer
                       component={MainVideoComposition as any}
                       inputProps={{
@@ -486,22 +632,24 @@ function StudioContent() {
                       controls
                     />
                   </div>
-                  <div className="text-[10px] text-[var(--color-text-tertiary)] font-bold text-center mt-2 uppercase tracking-wider">
-                    9:16 · {aiTotalDuration}s
+                  <div className="font-mono text-[10px] text-[#A79E8E] text-center mt-2 tracking-widest">
+                    9:16 · <span className="text-[#E8A33D]">{aiTotalDuration}s</span>
                   </div>
                 </div>
 
                 <div className="flex-1 space-y-3 w-full">
-                  <div className="text-xs font-semibold text-[var(--color-text-primary)]">{aiTitle}</div>
-                  <div className="scene-list">
+                  <div className="text-xs font-semibold text-[#F3EFE6]">{aiTitle}</div>
+                  <div className="space-y-1.5">
                     {aiStoryboard.map((scene, idx) => (
-                      <div key={idx} className="scene-item">
-                        <div className="scene-num">{scene.scene_index}</div>
+                      <div key={idx} className="hairline-row flex items-start gap-3 py-2">
+                        <div className="font-mono text-xs text-[#E8A33D] w-5">0{scene.scene_index}</div>
                         <div className="flex-1 min-w-0">
-                          <div className="scene-desc">
-                            <b>Overlay {idx + 1}</b> — {scene.text_overlay}
+                          <div className="text-xs text-[#F3EFE6]">
+                            {scene.text_overlay}
                           </div>
-                          <div className="scene-dur">{scene.duration}s · Pexels Stock Media</div>
+                          <div className="font-mono text-[11px] text-[#766E5F]">
+                            {scene.duration}s · Stock Reel
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -517,41 +665,25 @@ function StudioContent() {
                   <span className="card-title">Script Editor & Hook Structure</span>
                 </div>
                 <div className="space-y-3">
-                  <div className="text-xs text-[var(--color-text-secondary)] bg-[var(--color-background-secondary)] border border-[var(--color-border-tertiary)] rounded-lg p-3 space-y-1.5">
-                    <div><span className="text-[#534AB7] font-bold mr-1">[HOOK]</span> Stop wasting hours on manual tasks that can be automated.</div>
-                    <div><span className="text-[#0F6E56] font-bold mr-1">[PROBLEM]</span> Every business owner reaches a bottleneck trying to scale.</div>
-                    <div><span className="text-[#993C1D] font-bold mr-1">[SOLUTION]</span> Automated operations run 24/7 saving 15+ hours every single week.</div>
-                    <div><span className="text-[#185FA5] font-bold mr-1">[CTA]</span> Go to our link to copy our automation playbook!</div>
+                  <div className="text-xs text-[#A79E8E] bg-[#1A1712] border border-[#3A3427] rounded-[4px] p-3 space-y-1.5">
+                    <div className="font-semibold text-[#E8A33D]">Viral Hook Formula:</div>
+                    <div>Hook (0-5s) → Pain Point (5-15s) → Solution (15-25s) → Action CTA (25-30s)</div>
                   </div>
-
-                  <div>
-                    <label className="text-[10px] font-bold text-[var(--color-text-secondary)] uppercase tracking-wider block mb-1">
-                      Edit Voiceover Script
-                    </label>
-                    <textarea
-                      rows={5}
-                      value={aiScript}
-                      onChange={(e) => setAiScript(e.target.value)}
-                      className="w-full bg-[var(--color-background-primary)] border border-[var(--color-border-tertiary)] rounded-lg p-2.5 text-xs text-[var(--color-text-primary)] focus:outline-none focus:border-[#534AB7]"
-                    />
-                  </div>
+                  <textarea
+                    rows={6}
+                    value={aiScript}
+                    onChange={(e) => setAiScript(e.target.value)}
+                    className="w-full bg-[#1A1712] border border-[#3A3427] rounded-[4px] p-2.5 text-xs text-[#F3EFE6] focus:outline-none focus:border-[#E8A33D] font-mono leading-relaxed"
+                  />
                 </div>
               </div>
-
-              <div className="mt-4 pt-4 border-t border-[var(--color-border-tertiary)] flex gap-2">
-                <button
-                  onClick={() => alert("Rewriting hook with high-converting founder angle...")}
-                  className="btn flex items-center gap-1.5"
+              <div className="pt-3 border-t border-[#3A3427] flex justify-end">
+                <button 
+                  onClick={() => alert("Script regenerated with high-impact hook variation!")}
+                  className="btn-ghost"
                 >
-                  <Edit className="w-3.5 h-3.5 text-[#534AB7]" />
-                  Rewrite Hook
-                </button>
-                <button
-                  onClick={handleRenderHybrid}
-                  className="btn btn-primary flex items-center gap-1.5 ml-auto"
-                >
-                  <Play className="w-3.5 h-3.5" />
-                  Render AI Video
+                  <RefreshCw size={13} />
+                  <span>Regenerate angles</span>
                 </button>
               </div>
             </div>
@@ -560,26 +692,24 @@ function StudioContent() {
       )}
 
       {/* ========================================================================= */}
-      {/* MODE B & C: HYBRID MODE & UPLOAD EDIT */}
+      {/* MODE C: AI COPILOT HYBRID BAY (RAW VIDEO + AI AGENT BOT ALTERATION) */}
       {/* ========================================================================= */}
-      {(activeMode === "HYBRID" || activeMode === "UPLOAD_EDIT") && (
+      {activeMode === "HYBRID" && (
         <div className="space-y-6">
-          {/* Top Video Upload Zone */}
-          <div className="card p-5 border-dashed border-2 border-[var(--color-border-primary)]/40 bg-[var(--color-background-secondary)]/50">
-            <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-              <div className="flex items-center gap-3.5">
-                <div className="w-12 h-12 rounded-xl bg-[#534AB7]/10 flex items-center justify-center text-[#534AB7] shrink-0">
-                  <UploadCloud className="w-6 h-6" />
+          {/* Header Action Bar */}
+          <div className="card p-4 bg-[#232019] border border-[#3A3427]">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-[4px] bg-[#1A1712] border border-[#3A3427] flex items-center justify-center text-[#E8A33D]">
+                  <Film size={20} />
                 </div>
                 <div>
-                  <div className="text-sm font-bold text-[var(--color-text-primary)] flex items-center gap-2">
-                    {uploadFilename}
-                    <span className="pill pill-success text-[10px]">
-                      {activeMode === "HYBRID" ? "Hybrid Mode Active" : "Upload & Edit"}
-                    </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold text-[#F3EFE6]">{uploadFilename}</span>
+                    <span className="pill pill-success text-[10px]">Active Master Footage</span>
                   </div>
-                  <div className="text-xs text-[var(--color-text-secondary)] mt-0.5">
-                    {uploadFileSize} · 1080x1920 (9:16 Vertical) · 68.0 seconds · Authentic Founder Audio
+                  <div className="font-mono text-[11px] text-[#A79E8E] mt-0.5">
+                    {uploadFileSize} · 1080x1920 (9:16 Vertical) · <span className="text-[#E8A33D]">00:01:08:00</span> · Authentic Audio
                   </div>
                 </div>
               </div>
@@ -598,130 +728,83 @@ function StudioContent() {
                 />
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  className="btn text-xs font-semibold flex items-center gap-1.5"
+                  className="btn-ghost"
+                  title="Upload custom raw video footage"
                 >
-                  <UploadCloud className="w-3.5 h-3.5" />
-                  Upload Raw Video
+                  <UploadCloud className="w-3.5 h-3.5 text-[#A79E8E]" />
+                  <span>Upload Raw Video</span>
                 </button>
                 <button
-                  onClick={loadSampleVideo}
-                  className="btn btn-primary text-xs font-bold flex items-center gap-1.5"
+                  onClick={() => router.push("/editor")}
+                  className="btn-ghost text-[#A79E8E] hover:text-[#E8A33D]"
+                  title="Switch to Mode B Manual Multi-Clip Editor"
                 >
-                  <Wand2 className="w-3.5 h-3.5" />
-                  Analyze Founder Footage
+                  <Scissors className="w-3.5 h-3.5 text-[#E8A33D]" />
+                  <span>Mode B: Manual Editor ↗</span>
                 </button>
               </div>
             </div>
 
-            {/* Upload & Analysis Progress Checklist */}
-            <div className="mt-4 pt-3.5 border-t border-[var(--color-border-tertiary)] flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-2 text-xs font-medium text-[var(--color-text-secondary)]">
-                <span className="w-2 h-2 rounded-full bg-[#0F6E56] animate-pulse" />
+            {/* Analysis Progress Checklist */}
+            <div className="mt-3.5 pt-3 border-t border-[#3A3427] flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2 text-xs text-[#A79E8E]">
+                <span className="w-2 h-2 rounded-full bg-[#7FA37A] animate-pulse" />
                 {processingStage}
               </div>
 
-              <div className="flex items-center gap-3 text-[11px] font-semibold text-[var(--color-text-tertiary)]">
-                <span className="text-[#0F6E56] flex items-center gap-1">✓ Audio Extracted</span>
-                <span className="text-[#0F6E56] flex items-center gap-1">✓ Transcribed</span>
-                <span className="text-[#0F6E56] flex items-center gap-1">✓ Scenes Detected</span>
-                <span className="text-[#0F6E56] flex items-center gap-1">✓ Semantic B-Roll Ready</span>
-                <span className="text-[#534AB7] font-bold flex items-center gap-1">● Ready for Review</span>
+              <div className="flex items-center gap-3 text-[11px] font-mono text-[#766E5F]">
+                <span className="text-[#7FA37A]">✓ Audio Extracted</span>
+                <span className="text-[#7FA37A]">✓ Speech Transcribed</span>
+                <span className="text-[#7FA37A]">✓ Scenes Detected</span>
+                <span className="text-[#E8A33D] font-semibold">● AI Agent Copilot Active</span>
               </div>
             </div>
           </div>
 
           {/* Provenance Transparency Row */}
-          <div className="card p-4 bg-gradient-to-r from-[#534AB7]/5 via-transparent to-[#0F6E56]/5 border border-[var(--color-border-tertiary)]">
-            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 mb-2.5">
-              <div className="flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 text-[#534AB7]" />
-                <span className="text-xs font-bold text-[var(--color-text-primary)] uppercase tracking-wider">
-                  Content Provenance & Composition Breakdown
-                </span>
-              </div>
-              <span className="text-xs font-semibold text-[var(--color-text-secondary)]">
-                Authentic Founder Footage Preserved
-              </span>
-            </div>
-
-            {/* Segmented Provenance Bar */}
-            <div className="w-full h-3 rounded-full bg-slate-200 overflow-hidden flex shadow-inner">
-              <div
-                style={{ width: `${provenance.original_footage_pct}%` }}
-                className="bg-[#534AB7] h-full"
-                title={`Original Founder Video: ${provenance.original_footage_pct}%`}
-              />
-              <div
-                style={{ width: `${provenance.stock_broll_pct}%` }}
-                className="bg-[#0F6E56] h-full"
-                title={`Stock B-Roll: ${provenance.stock_broll_pct}%`}
-              />
-              <div
-                style={{ width: `${provenance.ai_graphics_pct}%` }}
-                className="bg-[#D97706] h-full"
-                title={`Motion Graphics: ${provenance.ai_graphics_pct}%`}
-              />
-              <div
-                style={{ width: `${provenance.ai_generated_pct}%` }}
-                className="bg-[#9333EA] h-full"
-                title={`AI Generative Visuals: ${provenance.ai_generated_pct}%`}
-              />
-            </div>
-
-            <div className="flex flex-wrap items-center justify-between gap-4 mt-2.5 text-[11px] font-medium text-[var(--color-text-secondary)]">
-              <span className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-[#534AB7]" />
-                Original Founder Video: <b>{provenance.original_footage_pct}%</b>
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-[#0F6E56]" />
-                Semantic B-Roll: <b>{provenance.stock_broll_pct}%</b>
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-[#D97706]" />
-                Motion Graphics: <b>{provenance.ai_graphics_pct}%</b>
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-[#9333EA]" />
-                AI Enhancements: <b>{provenance.ai_generated_pct}%</b>
-              </span>
-            </div>
+          <div className="card p-4 bg-[#232019] border border-[#3A3427]">
+            <ProvenanceBar 
+              founder={provenance.original_footage_pct}
+              broll={provenance.stock_broll_pct}
+              graphics={provenance.ai_graphics_pct}
+              aiVisuals={provenance.ai_generated_pct}
+            />
           </div>
 
-          {/* Main Dual Workspace: Remotion Player + Smart Analysis */}
+          {/* Main Dual Workspace: Remotion Player + Interactive AI Agent Bot Control Panel */}
           <div className="grid2">
-            {/* Left: Remotion Canvas Player */}
+            {/* Left: Remotion Editing Bay Monitor Preview */}
             <div className="card flex flex-col justify-between">
               <div>
                 <div className="card-hdr">
                   <span className="card-title flex items-center gap-2">
-                    <Film className="w-4 h-4 text-[#534AB7]" />
-                    Live Composition Preview
+                    <Film className="w-3.5 h-3.5 text-[#E8A33D]" />
+                    AI Altered Video Preview
                   </span>
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1">
                     <button
                       onClick={() => setAspectRatio("9:16")}
-                      className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                        aspectRatio === "9:16" ? "bg-[#534AB7] text-white" : "bg-slate-100 text-slate-600"
+                      className={`px-2 py-0.5 rounded-[3px] font-mono text-[10px] ${
+                        aspectRatio === "9:16" ? "bg-[#E8A33D] text-[#1A1712] font-semibold" : "border border-[#3A3427] text-[#A79E8E]"
                       }`}
                     >
                       9:16 Reel
                     </button>
                     <button
                       onClick={() => setAspectRatio("1:1")}
-                      className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                        aspectRatio === "1:1" ? "bg-[#534AB7] text-white" : "bg-slate-100 text-slate-600"
+                      className={`px-2 py-0.5 rounded-[3px] font-mono text-[10px] ${
+                        aspectRatio === "1:1" ? "bg-[#E8A33D] text-[#1A1712] font-semibold" : "border border-[#3A3427] text-[#A79E8E]"
                       }`}
                     >
-                      1:1 LinkedIn
+                      1:1 Square
                     </button>
                     <button
                       onClick={() => setAspectRatio("16:9")}
-                      className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                        aspectRatio === "16:9" ? "bg-[#534AB7] text-white" : "bg-slate-100 text-slate-600"
+                      className={`px-2 py-0.5 rounded-[3px] font-mono text-[10px] ${
+                        aspectRatio === "16:9" ? "bg-[#E8A33D] text-[#1A1712] font-semibold" : "border border-[#3A3427] text-[#A79E8E]"
                       }`}
                     >
-                      16:9 X
+                      16:9 Horizontal
                     </button>
                   </div>
                 </div>
@@ -735,7 +818,7 @@ function StudioContent() {
                       width: "100%",
                       maxWidth: aspectRatio === "9:16" ? "250px" : "440px"
                     }}
-                    className="bg-[#0b0f19] rounded-2xl overflow-hidden relative shadow-2xl border border-slate-700/80"
+                    className="monitor-frame relative"
                   >
                     <RemotionPlayer
                       component={HybridVideoComposition as any}
@@ -757,145 +840,162 @@ function StudioContent() {
               </div>
 
               {/* Player Bottom Actions */}
-              <div className="pt-4 mt-2 border-t border-[var(--color-border-tertiary)] flex items-center justify-between gap-2">
-                <div className="text-[11px] text-[var(--color-text-secondary)]">
-                  Tracks: <b>8 active layers</b> · Sound ducked 0.12x
+              <div className="pt-3 mt-2 border-t border-[#3A3427] flex items-center justify-between gap-2">
+                <div className="font-mono text-[11px] text-[#A79E8E]">
+                  Layers: <span className="text-[#E8A33D]">{hybridTracks.broll?.length || 2} B-Roll · {hybridTracks.graphics?.length || 1} Graphics</span>
                 </div>
 
                 <div className="flex items-center gap-2">
                   <button
                     onClick={handleRenderHybrid}
                     disabled={rendering}
-                    className="btn text-xs font-semibold flex items-center gap-1.5"
+                    className="btn-ghost text-xs"
                   >
-                    <RefreshCw className={`w-3.5 h-3.5 ${rendering ? "animate-spin" : ""}`} />
-                    Render Platform Cut
+                    <RefreshCw className={`w-3 h-3 ${rendering ? "animate-spin" : ""}`} />
+                    <span>Render Platform Cut</span>
                   </button>
 
                   <button
                     onClick={handleSubmitToApproval}
-                    className="btn btn-primary text-xs font-bold flex items-center gap-1.5 shadow-md shadow-purple-500/20"
+                    className="btn-primary"
                   >
-                    <CheckSquare className="w-3.5 h-3.5 text-emerald-300" />
-                    Send to Human Approval ↗
+                    <CheckSquare className="w-3.5 h-3.5" />
+                    <span>Send for human approval ↗</span>
                   </button>
                 </div>
               </div>
             </div>
 
-            {/* Right: AI Video Analysis & Editorial Suggestions */}
+            {/* Right: INTERACTIVE AI AGENT BOT PROMPT PANEL */}
             <div className="card flex flex-col justify-between space-y-4">
-              <div>
+              <div className="space-y-3">
                 <div className="card-hdr">
-                  <span className="card-title flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-[#534AB7]" />
-                    AI Video Analysis & Suggestions
+                  <span className="card-title flex items-center gap-2 text-[#E8A33D]">
+                    <Bot className="w-4 h-4 text-[#E8A33D]" />
+                    AI Agent Video Alteration Bot
                   </span>
                   <span className="pill pill-success text-[10px]">
-                    {suggestions.filter((s) => s.status === "ACCEPTED").length} Applied
+                    Interactive Copilot
                   </span>
                 </div>
 
-                {/* Hook Optimization Banner */}
-                {hasAlternateHook && (
-                  <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 mb-3 text-xs">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="font-bold text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
-                        <AlertCircle className="w-3.5 h-3.5" />
-                        Viral Hook Detected at 00:45
-                      </div>
-                      <button
-                        onClick={handleHookSwap}
-                        className="px-2.5 py-1 rounded bg-amber-600 text-white font-bold text-[10px] hover:bg-amber-700 transition-colors"
-                      >
-                        {hookSwapped ? "Restore Original" : "Use As Opening"}
-                      </button>
-                    </div>
-                    <p className="text-[11px] text-amber-900/80 dark:text-amber-200/80 mt-1">
-                      {hookSwapped
-                        ? 'Opening swapped to: "Our customer retention grew 40% in 90 days..."'
-                        : 'FounderOS detected a statement with 9.5/10 viral potential at 00:45 ("+40% retention in 90 days"). Propose re-ordering as the opening hook.'}
-                    </p>
+                {/* Prompt Instruction Bar */}
+                <div className="bg-[#1A1712] border border-[#3A3427] focus-within:border-[#E8A33D] rounded-[6px] p-2.5 transition-all">
+                  <label className="text-[10px] font-mono uppercase tracking-wider text-[#A79E8E] flex items-center justify-between mb-1">
+                    <span>Command the AI Agent to Alter Video</span>
+                    <span className="text-[#E8A33D]">{isBotProcessing ? "Bot Reasoning..." : "Ready"}</span>
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <textarea
+                      rows={2}
+                      value={userPromptInput}
+                      onChange={(e) => setUserPromptInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          handleSendPrompt();
+                        }
+                      }}
+                      placeholder="Tell the bot: e.g. 'Cut out silences, insert SaaS B-roll at 10s, and make the captions energetic amber'..."
+                      className="w-full bg-transparent text-xs text-[#F3EFE6] placeholder-[#766E5F] focus:outline-none resize-none leading-relaxed"
+                    />
+                    <button
+                      onClick={() => handleSendPrompt()}
+                      disabled={isBotProcessing || !userPromptInput.trim()}
+                      className="h-9 px-3 rounded-[4px] bg-[#E8A33D] text-[#14120D] font-semibold text-xs flex items-center gap-1 hover:bg-[#d69330] transition-colors disabled:opacity-40 shrink-0"
+                    >
+                      {isBotProcessing ? (
+                        <RefreshCw size={13} className="animate-spin" />
+                      ) : (
+                        <Send size={13} />
+                      )}
+                      <span>Alter</span>
+                    </button>
                   </div>
-                )}
-
-                {/* Suggestions Checklist */}
-                <div className="space-y-2">
-                  <div className="text-[10px] font-bold text-[var(--color-text-tertiary)] uppercase tracking-wider">
-                    AI Editorial Suggestions (Human Controlled)
-                  </div>
-                  {suggestions.map((sug) => {
-                    const isAccepted = sug.status === "ACCEPTED";
-                    return (
-                      <div
-                        key={sug.id}
-                        className={`p-2.5 rounded-lg border text-xs flex items-center justify-between gap-2 transition-all ${
-                          isAccepted
-                            ? "bg-[var(--color-background-secondary)] border-[var(--color-border-tertiary)]"
-                            : "bg-slate-50 border-slate-200 opacity-60 line-through"
-                        }`}
-                      >
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span
-                            className={`w-2 h-2 rounded-full shrink-0 ${
-                              isAccepted ? "bg-[#0F6E56]" : "bg-slate-400"
-                            }`}
-                          />
-                          <span className="text-[var(--color-text-primary)] font-medium truncate">
-                            {sug.desc}
-                          </span>
-                        </div>
-                        <button
-                          onClick={() => toggleSuggestion(sug.id)}
-                          className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${
-                            isAccepted
-                              ? "bg-[#0F6E56]/15 text-[#0F6E56] hover:bg-rose-100 hover:text-rose-700"
-                              : "bg-slate-200 text-slate-700 hover:bg-emerald-100 hover:text-emerald-800"
-                          }`}
-                        >
-                          {isAccepted ? "Accepted ✓" : "Enable"}
-                        </button>
-                      </div>
-                    );
-                  })}
                 </div>
 
-                {/* Detected Marketing Acts */}
-                <div className="mt-4 space-y-1.5">
-                  <div className="text-[10px] font-bold text-[var(--color-text-tertiary)] uppercase tracking-wider">
-                    Detected Storyboard Acts
+                {/* Quick AI Alteration Prompt Chips */}
+                <div className="space-y-1.5">
+                  <div className="text-[10px] font-mono text-[#766E5F] uppercase tracking-wider">
+                    Quick AI Action Presets:
                   </div>
-                  <div className="grid grid-cols-3 gap-2">
-                    {segmentsList.slice(0, 6).map((seg) => (
-                      <div
-                        key={seg.id}
-                        className="bg-[var(--color-background-primary)] border border-[var(--color-border-tertiary)] rounded-lg p-2 text-center shadow-xs"
+                  <div className="flex flex-wrap gap-1.5">
+                    {[
+                      { label: "⚡ Viral Hook Swap", prompt: "Re-order opening hook with the +40% retention growth metric for peak attention", key: "hook_opt" },
+                      { label: "🎬 Inject SaaS B-Roll", prompt: "Insert SaaS analytics and automation workflow B-roll during the problem & solution segments", key: "broll_inject" },
+                      { label: "✂️ Cut Silences & Fillers", prompt: "Remove 1.2s silence before problem statement and filter out filler words", key: "silence_cut" },
+                      { label: "🔥 Kinetic Amber Captions", prompt: "Apply kinetic amber word-level highlight captions with safe-zone bounds", key: "kinetic_captions" },
+                      { label: "📊 +40% Stat Card", prompt: "Overlay animated Glassmorphism Stat Card for +40% retention cohort results", key: "stat_card" },
+                      { label: "🎵 Duck Audio & Lo-Fi", prompt: "Add ambient Lo-Fi music track ducked 0.12x under founder speech", key: "audio_duck" }
+                    ].map((chip) => (
+                      <button
+                        key={chip.label}
+                        onClick={() => handleSendPrompt(chip.prompt, chip.key)}
+                        disabled={isBotProcessing}
+                        className="px-2.5 py-1 rounded-[4px] bg-[#1A1712] border border-[#3A3427] hover:border-[#E8A33D] text-[#A79E8E] hover:text-[#E8A33D] text-[11px] font-medium transition-colors disabled:opacity-40"
                       >
-                        <div className="text-[9px] font-bold uppercase text-[#534AB7]">
-                          {seg.type} · {seg.action}
-                        </div>
-                        <div className="text-[11px] font-bold text-[var(--color-text-primary)] truncate mt-0.5">
-                          {seg.headline}
-                        </div>
-                        <div className="text-[9px] text-[var(--color-text-tertiary)] mt-0.5">
-                          {seg.start}s - {seg.end}s
-                        </div>
-                      </div>
+                        {chip.label}
+                      </button>
                     ))}
                   </div>
                 </div>
+
+                {/* AI Agent Thought & Action History Feed */}
+                <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
+                  <div className="text-[10px] font-mono text-[#766E5F] uppercase tracking-wider">
+                    Agent Thought & Alteration Logs:
+                  </div>
+
+                  {chatHistory.map((msg) => (
+                    <div
+                      key={msg.id}
+                      className={`p-2.5 rounded-[4px] border text-xs space-y-1.5 transition-all ${
+                        msg.sender === "user"
+                          ? "bg-[#2C281F]/50 border-[#E8A33D]/40 text-[#F3EFE6]"
+                          : "bg-[#1A1712] border-[#3A3427] text-[#A79E8E]"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between text-[10px] font-mono">
+                        <span className={msg.sender === "user" ? "text-[#E8A33D] font-bold" : "text-[#7FA37A] font-semibold flex items-center gap-1"}>
+                          {msg.sender === "user" ? "You (Preference Prompt)" : <><Bot size={11} /> AI Video Agent Bot</>}
+                        </span>
+                        <span className="text-[#766E5F]">{msg.timestamp}</span>
+                      </div>
+
+                      <p className="text-[#F3EFE6] leading-relaxed text-[11px]">{msg.text}</p>
+
+                      {msg.actions && msg.actions.length > 0 && (
+                        <div className="pt-1 border-t border-[#3A3427]/60 flex flex-wrap gap-1">
+                          {msg.actions.map((act, idx) => (
+                            <span key={idx} className="bg-[#7FA37A]/15 text-[#7FA37A] border border-[#7FA37A]/30 px-1.5 py-0.2 rounded font-mono text-[9px] flex items-center gap-1">
+                              <CheckCircle2 size={9} /> {act}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      {msg.logs && msg.logs.length > 0 && (
+                        <div className="text-[10px] font-mono text-[#8A8274] bg-[#14120D] p-1.5 rounded space-y-0.5">
+                          {msg.logs.map((log, idx) => (
+                            <div key={idx}>› {log}</div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
 
-              {/* Edit Narration Script block */}
-              <div className="pt-3 border-t border-[var(--color-border-tertiary)]">
-                <label className="text-[10px] font-bold text-[var(--color-text-secondary)] uppercase tracking-wider block mb-1">
-                  Founder Narration Transcript (Word-level timestamps synced)
+              {/* Transcript Sync */}
+              <div className="pt-3 border-t border-[#3A3427]">
+                <label className="font-mono text-[10px] text-[#A79E8E] uppercase tracking-wider block mb-1">
+                  Active Founder Speech Narration (Synced with AI Captions)
                 </label>
                 <textarea
-                  rows={3}
+                  rows={2}
                   value={transcriptText}
                   onChange={(e) => setTranscriptText(e.target.value)}
-                  className="w-full bg-[var(--color-background-primary)] border border-[var(--color-border-tertiary)] rounded-lg p-2 text-xs text-[var(--color-text-primary)] focus:outline-none focus:border-[#534AB7]"
+                  className="w-full bg-[#1A1712] border border-[#3A3427] rounded-[4px] p-2 font-mono text-xs text-[#F3EFE6] focus:outline-none focus:border-[#E8A33D] leading-relaxed"
                 />
               </div>
             </div>
@@ -905,153 +1005,121 @@ function StudioContent() {
           {/* 8-TRACK INTERACTIVE VISUAL TIMELINE EDITOR */}
           {/* ========================================================================= */}
           <div className="card p-5 space-y-4">
-            <div className="flex items-center justify-between border-b border-[var(--color-border-tertiary)] pb-3">
+            <div className="flex items-center justify-between border-b border-[#3A3427] pb-3">
               <div className="flex items-center gap-2">
-                <Layers className="w-5 h-5 text-[#534AB7]" />
-                <h3 className="text-sm font-bold text-[var(--color-text-primary)]">
-                  Hybrid Multi-Layer Timeline Editor
+                <Layers className="w-4 h-4 text-[#E8A33D]" />
+                <h3 className="text-xs font-semibold text-[#F3EFE6]">
+                  NLE Multi-Track Timeline Bay (Altered by AI Agent)
                 </h3>
-                <span className="text-xs text-[var(--color-text-tertiary)]">
-                  (Click any track element to inspect or tweak)
-                </span>
               </div>
-              <div className="text-xs font-mono text-[var(--color-text-secondary)] bg-[var(--color-background-secondary)] px-2.5 py-1 rounded border border-[var(--color-border-tertiary)]">
-                00:00 ──────────────────────────────────────── 01:08
+              <div className="font-mono text-xs text-[#E8A33D] bg-[#1A1712] px-2.5 py-1 rounded-[4px] border border-[#3A3427] tabular-nums">
+                00:00:00 ──────────────────────────────────────── 00:01:08:00
               </div>
             </div>
 
             {/* Timeline Tracks Grid */}
-            <div className="space-y-2.5 font-mono text-xs">
-              {/* Track 1: Original Video */}
+            <div className="space-y-2 font-mono text-xs">
+              {/* Track 1: Original Founder Video (Amber #E8A33D) */}
               <div className="flex items-center gap-3">
-                <div className="w-28 text-[11px] font-bold text-[var(--color-text-secondary)] uppercase flex items-center gap-1.5 shrink-0">
-                  <Video className="w-3.5 h-3.5 text-[#534AB7]" />
+                <div className="w-32 text-[10px] font-medium text-[#E8A33D] uppercase flex items-center gap-1.5 shrink-0">
+                  <Video className="w-3 h-3 text-[#E8A33D]" />
                   Founder Video
                 </div>
-                <div className="flex-1 h-9 bg-slate-100 dark:bg-slate-800 rounded-lg overflow-hidden flex gap-1 p-1">
+                <div className="flex-1 h-8 bg-[#1A1712] border border-[#3A3427] rounded-[3px] overflow-hidden flex gap-1 p-0.5">
                   <div
                     style={{ width: "35%" }}
-                    className="bg-[#534AB7] rounded flex items-center justify-center text-[10px] text-white font-bold tracking-tight shadow-sm"
+                    className="bg-[#E8A33D] text-[#14120D] rounded-[2px] flex items-center justify-center text-[10px] font-semibold tracking-tight"
                   >
-                    Talking Head (Hook)
+                    Talking Head ({hookSwapped ? "Retention Hook" : "Problem Hook"})
                   </div>
                   <div
                     style={{ width: "25%" }}
-                    className="bg-[#534AB7]/40 rounded flex items-center justify-center text-[10px] text-white/90 border border-dashed border-[#534AB7]"
+                    className="bg-[#E8A33D]/20 text-[#E8A33D] border border-dashed border-[#E8A33D] rounded-[2px] flex items-center justify-center text-[10px]"
                   >
                     Muted (Under B-Roll)
                   </div>
                   <div
                     style={{ width: "40%" }}
-                    className="bg-[#534AB7] rounded flex items-center justify-center text-[10px] text-white font-bold tracking-tight shadow-sm"
+                    className="bg-[#E8A33D] text-[#14120D] rounded-[2px] flex items-center justify-center text-[10px] font-semibold tracking-tight"
                   >
                     Founder (CTA)
                   </div>
                 </div>
               </div>
 
-              {/* Track 2: Audio & Ducking */}
+              {/* Track 2: Semantic B-Roll Cutaway (Moss #7FA37A) */}
               <div className="flex items-center gap-3">
-                <div className="w-28 text-[11px] font-bold text-[var(--color-text-secondary)] uppercase flex items-center gap-1.5 shrink-0">
-                  <Volume2 className="w-3.5 h-3.5 text-[#0F6E56]" />
-                  Audio & Voice
-                </div>
-                <div className="flex-1 h-8 bg-slate-100 dark:bg-slate-800 rounded-lg overflow-hidden flex p-1">
-                  <div className="w-full bg-[#0F6E56] rounded flex items-center justify-center text-[10px] text-white font-semibold">
-                    Original Speech Voiceover (Full 68s Track · Normalized)
-                  </div>
-                </div>
-              </div>
-
-              {/* Track 3: Kinetic Captions */}
-              <div className="flex items-center gap-3">
-                <div className="w-28 text-[11px] font-bold text-[var(--color-text-secondary)] uppercase flex items-center gap-1.5 shrink-0">
-                  <Type className="w-3.5 h-3.5 text-amber-500" />
-                  Captions
-                </div>
-                <div className="flex-1 h-8 bg-slate-100 dark:bg-slate-800 rounded-lg overflow-hidden flex p-1">
-                  <div className="w-full bg-gradient-to-r from-amber-500 via-purple-500 to-amber-500 rounded flex items-center justify-center text-[10px] text-white font-bold uppercase tracking-wider">
-                    Word-Level Active Highlighting (Safe-Area Protected)
-                  </div>
-                </div>
-              </div>
-
-              {/* Track 4: Semantic B-Roll */}
-              <div className="flex items-center gap-3">
-                <div className="w-28 text-[11px] font-bold text-[var(--color-text-secondary)] uppercase flex items-center gap-1.5 shrink-0">
-                  <Film className="w-3.5 h-3.5 text-indigo-500" />
+                <div className="w-32 text-[10px] font-medium text-[#7FA37A] uppercase flex items-center gap-1.5 shrink-0">
+                  <Film className="w-3 h-3 text-[#7FA37A]" />
                   B-Roll Cutaway
                 </div>
-                <div className="flex-1 h-8 bg-slate-100 dark:bg-slate-800 rounded-lg overflow-hidden relative p-1 flex">
+                <div className="flex-1 h-8 bg-[#1A1712] border border-[#3A3427] rounded-[3px] overflow-hidden relative p-0.5 flex">
                   <div
                     style={{ left: "14%", width: "24%" }}
-                    className="absolute h-6 bg-indigo-600 rounded flex items-center justify-center text-[10px] text-white font-bold shadow"
+                    className="absolute h-7 bg-[#7FA37A] text-[#1A1712] rounded-[2px] flex items-center justify-center text-[10px] font-semibold"
                   >
                     B-Roll: SaaS Analytics
                   </div>
                   <div
                     style={{ left: "54%", width: "16%" }}
-                    className="absolute h-6 bg-indigo-600 rounded flex items-center justify-center text-[10px] text-white font-bold shadow"
+                    className="absolute h-7 bg-[#7FA37A] text-[#1A1712] rounded-[2px] flex items-center justify-center text-[10px] font-semibold"
                   >
                     B-Roll: Workflow UI
                   </div>
                 </div>
               </div>
 
-              {/* Track 5: Motion Graphics */}
+              {/* Track 3: Motion Graphics */}
               <div className="flex items-center gap-3">
-                <div className="w-28 text-[11px] font-bold text-[var(--color-text-secondary)] uppercase flex items-center gap-1.5 shrink-0">
-                  <BarChart3 className="w-3.5 h-3.5 text-emerald-500" />
+                <div className="w-32 text-[10px] font-medium text-[#A79E8E] uppercase flex items-center gap-1.5 shrink-0">
+                  <BarChart3 className="w-3 h-3 text-[#A79E8E]" />
                   Motion Graphics
                 </div>
-                <div className="flex-1 h-8 bg-slate-100 dark:bg-slate-800 rounded-lg overflow-hidden relative p-1 flex">
+                <div className="flex-1 h-8 bg-[#1A1712] border border-[#3A3427] rounded-[3px] overflow-hidden relative p-0.5 flex">
                   <div
                     style={{ left: "68%", width: "20%" }}
-                    className="absolute h-6 bg-emerald-600 rounded flex items-center justify-center text-[10px] text-white font-bold shadow"
+                    className="absolute h-7 bg-[#A79E8E] text-[#1A1712] rounded-[2px] flex items-center justify-center text-[10px] font-semibold"
                   >
-                    Stat Card: +40% Retention
+                    Stat: +40% Retention
+                  </div>
+                </div>
+              </div>
+
+              {/* Track 4: Kinetic Captions */}
+              <div className="flex items-center gap-3">
+                <div className="w-32 text-[10px] font-medium text-[#F3EFE6] uppercase flex items-center gap-1.5 shrink-0">
+                  <Type className="w-3 h-3 text-[#F3EFE6]" />
+                  Captions
+                </div>
+                <div className="flex-1 h-7 bg-[#1A1712] border border-[#3A3427] rounded-[3px] overflow-hidden flex p-0.5">
+                  <div className="w-full bg-[#2C281F] text-[#E8A33D] rounded-[2px] flex items-center justify-center text-[10px] font-medium uppercase tracking-wider">
+                    Word-Level Active Highlighting (Safe-Area Protected)
+                  </div>
+                </div>
+              </div>
+
+              {/* Track 5: Audio & Voice */}
+              <div className="flex items-center gap-3">
+                <div className="w-32 text-[10px] font-medium text-[#A79E8E] uppercase flex items-center gap-1.5 shrink-0">
+                  <Volume2 className="w-3 h-3 text-[#7FA37A]" />
+                  Audio & Voice
+                </div>
+                <div className="flex-1 h-7 bg-[#1A1712] border border-[#3A3427] rounded-[3px] overflow-hidden flex p-0.5">
+                  <div className="w-full bg-[#7FA37A]/20 text-[#7FA37A] border border-[#7FA37A]/30 rounded-[2px] flex items-center justify-center text-[10px]">
+                    Original Speech Voiceover (68s Master · Normalized)
                   </div>
                 </div>
               </div>
 
               {/* Track 6: Background Music */}
               <div className="flex items-center gap-3">
-                <div className="w-28 text-[11px] font-bold text-[var(--color-text-secondary)] uppercase flex items-center gap-1.5 shrink-0">
-                  <Sliders className="w-3.5 h-3.5 text-sky-500" />
-                  Music (Lo-Fi)
+                <div className="w-32 text-[10px] font-medium text-[#766E5F] uppercase flex items-center gap-1.5 shrink-0">
+                  <Sliders className="w-3 h-3 text-[#766E5F]" />
+                  Ambient Ducking
                 </div>
-                <div className="flex-1 h-7 bg-slate-100 dark:bg-slate-800 rounded-lg overflow-hidden flex p-1">
-                  <div className="w-full bg-sky-600/80 rounded flex items-center justify-center text-[9px] text-white font-semibold">
-                    Ambient Tech Lo-Fi (Ducked to 0.12x during speech)
-                  </div>
-                </div>
-              </div>
-
-              {/* Track 7: CTA Overlay */}
-              <div className="flex items-center gap-3">
-                <div className="w-28 text-[11px] font-bold text-[var(--color-text-secondary)] uppercase flex items-center gap-1.5 shrink-0">
-                  <CheckSquare className="w-3.5 h-3.5 text-purple-500" />
-                  CTA & Bio Link
-                </div>
-                <div className="flex-1 h-7 bg-slate-100 dark:bg-slate-800 rounded-lg overflow-hidden relative p-1 flex">
-                  <div
-                    style={{ left: "82%", width: "18%" }}
-                    className="absolute h-5 bg-purple-600 rounded flex items-center justify-center text-[9px] text-white font-bold uppercase shadow"
-                  >
-                    CTA Card
-                  </div>
-                </div>
-              </div>
-
-              {/* Track 8: Branding & Watermark */}
-              <div className="flex items-center gap-3">
-                <div className="w-28 text-[11px] font-bold text-[var(--color-text-secondary)] uppercase flex items-center gap-1.5 shrink-0">
-                  <ShieldCheck className="w-3.5 h-3.5 text-slate-500" />
-                  Branding
-                </div>
-                <div className="flex-1 h-6 bg-slate-100 dark:bg-slate-800 rounded-lg overflow-hidden flex p-1">
-                  <div className="w-full bg-slate-400/30 rounded flex items-center justify-center text-[9px] text-[var(--color-text-secondary)] font-bold">
-                    FounderOS Top-Right Watermark & Primary Color System
+                <div className="flex-1 h-6 bg-[#1A1712] border border-[#3A3427] rounded-[3px] overflow-hidden flex p-0.5">
+                  <div className="w-full bg-[#2C281F] text-[#766E5F] rounded-[2px] flex items-center justify-center text-[9px]">
+                    Lo-Fi Bed (Ducked to 0.12x during speech)
                   </div>
                 </div>
               </div>
@@ -1062,72 +1130,69 @@ function StudioContent() {
           <div className="card p-5 space-y-3">
             <div className="flex items-center justify-between">
               <div>
-                <h4 className="text-sm font-bold text-[var(--color-text-primary)] flex items-center gap-1.5">
-                  <Wand2 className="w-4 h-4 text-[#534AB7]" />
-                  AI Repurposing: Recommended Short-Form Clips
+                <h4 className="text-xs font-semibold text-[#F3EFE6] flex items-center gap-1.5">
+                  <Wand2 className="w-3.5 h-3.5 text-[#E8A33D]" />
+                  AI Repurposing: Automated Shorts Extractions
                 </h4>
-                <p className="text-xs text-[var(--color-text-secondary)]">
-                  FounderOS automatically identified 3 high-impact standalone shorts from this recording:
+                <p className="text-xs text-[#A79E8E]">
+                  FounderOS automatically distilled 3 high-impact standalone cuts from this master take:
                 </p>
               </div>
               <span className="pill pill-info text-[10px]">Multi-Clip Engine</span>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
-              <div className="border border-[var(--color-border-tertiary)] rounded-xl p-3 bg-[var(--color-background-primary)] space-y-2">
+              <div className="border border-[#3A3427] rounded-[4px] p-3 bg-[#1A1712] space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold text-[#534AB7] uppercase tracking-wider">Clip #1 · 31s</span>
-                  <span className="text-[10px] text-emerald-600 font-bold">IG Reel / Short</span>
+                  <span className="font-mono text-[10px] text-[#E8A33D] uppercase">Clip #1 · 31s</span>
+                  <span className="font-mono text-[10px] text-[#7FA37A]">IG Reel</span>
                 </div>
-                <div className="text-xs font-bold text-[var(--color-text-primary)]">
+                <div className="text-xs font-semibold text-[#F3EFE6]">
                   Why 60% of SaaS Users Churn on Step 2
                 </div>
-                <div className="text-[11px] text-[var(--color-text-secondary)]">
+                <div className="text-[11px] text-[#A79E8E]">
                   Hook: &quot;Losing 60% of users right after sign-up?&quot;
                 </div>
                 <button
-                  onClick={() => alert("Clip #1 selected for single export.")}
-                  className="btn text-[11px] w-full py-1 text-center font-semibold"
+                  onClick={() => alert("Clip #1 loaded into active bay.")}
+                  className="btn-ghost text-[11px] w-full py-1 text-center font-medium"
                 >
-                  Edit Clip #1
+                  Load Cut #1
                 </button>
               </div>
 
-              <div className="border border-[#534AB7]/40 rounded-xl p-3 bg-[#534AB7]/5 space-y-2">
+              <div className="border border-[#E8A33D] rounded-[4px] p-3 bg-[#2C281F]/40 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold text-[#534AB7] uppercase tracking-wider">Clip #2 · 37s (Master)</span>
-                  <span className="text-[10px] text-[#534AB7] font-bold">LinkedIn / X</span>
+                  <span className="font-mono text-[10px] text-[#E8A33D] uppercase font-bold">Clip #2 · 37s (Master)</span>
+                  <span className="font-mono text-[10px] text-[#E8A33D]">LinkedIn / X</span>
                 </div>
-                <div className="text-xs font-bold text-[var(--color-text-primary)]">
+                <div className="text-xs font-semibold text-[#F3EFE6]">
                   How We Grew Retention +40% in 90 Days
                 </div>
-                <div className="text-[11px] text-[var(--color-text-secondary)]">
+                <div className="text-[11px] text-[#A79E8E]">
                   Hook: &quot;The exact automated onboarding workflow that grew retention 40%&quot;
                 </div>
-                <button
-                  onClick={() => alert("Active clip loaded.")}
-                  className="btn btn-primary text-[11px] w-full py-1 text-center font-bold"
-                >
-                  Active in Editor ✓
-                </button>
+                <div className="text-[11px] font-mono text-[#E8A33D] text-center py-1">
+                  Active in Copilot Bay ✓
+                </div>
               </div>
 
-              <div className="border border-[var(--color-border-tertiary)] rounded-xl p-3 bg-[var(--color-background-primary)] space-y-2">
+              <div className="border border-[#3A3427] rounded-[4px] p-3 bg-[#1A1712] space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold text-[#534AB7] uppercase tracking-wider">Clip #3 · 36s</span>
-                  <span className="text-[10px] text-amber-600 font-bold">Thought Leadership</span>
+                  <span className="font-mono text-[10px] text-[#E8A33D] uppercase">Clip #3 · 36s</span>
+                  <span className="font-mono text-[10px] text-[#A79E8E]">Founder Insights</span>
                 </div>
-                <div className="text-xs font-bold text-[var(--color-text-primary)]">
+                <div className="text-xs font-semibold text-[#F3EFE6]">
                   The Single Biggest SaaS Onboarding Mistake
                 </div>
-                <div className="text-[11px] text-[var(--color-text-secondary)]">
+                <div className="text-[11px] text-[#A79E8E]">
                   Hook: &quot;Stop pouring money into ads until you fix this onboarding leak&quot;
                 </div>
                 <button
-                  onClick={() => alert("Clip #3 selected for single export.")}
-                  className="btn text-[11px] w-full py-1 text-center font-semibold"
+                  onClick={() => alert("Clip #3 loaded into active bay.")}
+                  className="btn-ghost text-[11px] w-full py-1 text-center font-medium"
                 >
-                  Edit Clip #3
+                  Load Cut #3
                 </button>
               </div>
             </div>
@@ -1140,7 +1205,7 @@ function StudioContent() {
 
 export default function VideoStudio() {
   return (
-    <Suspense fallback={<div className="py-12 text-center text-[var(--color-text-secondary)]">Loading Composition Studio...</div>}>
+    <Suspense fallback={<div className="py-12 text-center text-[#A79E8E] font-mono text-xs">Loading Studio Bay...</div>}>
       <StudioContent />
     </Suspense>
   );

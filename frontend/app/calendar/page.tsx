@@ -9,7 +9,9 @@ import {
   Facebook, 
   Twitter,
   Calendar,
-  RefreshCw
+  RefreshCw,
+  Clock,
+  Clapperboard
 } from "lucide-react";
 
 interface ContentItem {
@@ -34,7 +36,6 @@ export default function ContentCalendarPage() {
       const data = await res.json();
       setItems(data);
     } catch (err) {
-      // Mock Fallbacks matching founderos_dashboard.html calendar exactly
       const mockCalendar: ContentItem[] = [
         {
           id: 1,
@@ -42,7 +43,7 @@ export default function ContentCalendarPage() {
           type: "Founder Story",
           title: "Unlocking Growth: 5 Secrets of Modern Scaling",
           status: "PENDING_APPROVAL",
-          scheduled_time: "Monday"
+          scheduled_time: "Monday 09:00:00"
         },
         {
           id: 2,
@@ -50,7 +51,7 @@ export default function ContentCalendarPage() {
           type: "Product Demo",
           title: "30-Second Automation That Saves 15 Hours/Week",
           status: "PENDING_APPROVAL",
-          scheduled_time: "Tuesday"
+          scheduled_time: "Tuesday 11:00:00"
         },
         {
           id: 3,
@@ -58,7 +59,7 @@ export default function ContentCalendarPage() {
           type: "Industry Insight",
           title: "Why 73% of SaaS Startups Fail at Content Marketing",
           status: "DRAFT",
-          scheduled_time: "Wednesday"
+          scheduled_time: "Wednesday 14:30:00"
         },
         {
           id: 4,
@@ -66,7 +67,7 @@ export default function ContentCalendarPage() {
           type: "Tips & Tricks",
           title: "5 Hooks That Doubled Our Video Watch Time",
           status: "DRAFT",
-          scheduled_time: "Thursday"
+          scheduled_time: "Thursday 10:00:00"
         },
         {
           id: 5,
@@ -74,7 +75,7 @@ export default function ContentCalendarPage() {
           type: "Customer Success",
           title: "How Acme Corp Cut Reporting Time by 80% Using Our Tool",
           status: "DRAFT",
-          scheduled_time: "Friday"
+          scheduled_time: "Friday 16:00:00"
         }
       ];
       setItems(mockCalendar);
@@ -89,11 +90,11 @@ export default function ContentCalendarPage() {
 
   const getPlatformIcon = (platform: string) => {
     const p = platform.toLowerCase();
-    if (p.includes("linkedin")) return { Icon: Linkedin, className: "ci-linkedin" };
-    if (p.includes("instagram")) return { Icon: Instagram, className: "ci-instagram" };
-    if (p.includes("youtube")) return { Icon: Youtube, className: "ci-youtube" };
-    if (p.includes("facebook")) return { Icon: Facebook, className: "ci-facebook" };
-    return { Icon: Twitter, className: "ci-x" };
+    if (p.includes("linkedin")) return { Icon: Linkedin, textClass: "text-[#E8A33D]" };
+    if (p.includes("instagram")) return { Icon: Instagram, textClass: "text-[#7FA37A]" };
+    if (p.includes("youtube")) return { Icon: Youtube, textClass: "text-[#C0453B]" };
+    if (p.includes("facebook")) return { Icon: Facebook, textClass: "text-[#A79E8E]" };
+    return { Icon: Twitter, textClass: "text-[#F3EFE6]" };
   };
 
   const getStatusPill = (status: string) => {
@@ -101,43 +102,31 @@ export default function ContentCalendarPage() {
       return (
         <span className="pill pill-success">
           <span className="dot" />
-          Published
+          Broadcast ready
         </span>
       );
     }
     if (status === "PENDING_APPROVAL" || status === "PENDING") {
       return (
         <span className="pill pill-warn">
-          <span className="dot" />
-          Pending
+          <span className="dot dot-tally" />
+          Review pending
         </span>
       );
     }
     return (
       <span className="pill pill-draft">
         <span className="dot" />
-        Draft
+        Draft bay
       </span>
     );
   };
 
-  // Group items by day of the week
   const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
   const getItemsForDay = (day: string) => {
     return items.filter(item => {
       const scheduledDay = item.scheduled_time.toLowerCase();
-      // check if it contains the day name (e.g. "monday" or matched index)
       if (scheduledDay.includes(day.toLowerCase())) return true;
-      
-      // Fallback index mapping if backend uses dates
-      const date = new Date(item.scheduled_time);
-      if (!isNaN(date.getTime())) {
-        const dayIdx = date.getDay(); // 0 is Sunday, 1 is Monday
-        const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-        return dayNames[dayIdx] === day;
-      }
-      
-      // fallback matching by order
       const fallbackMapping: { [key: number]: string } = { 1: "Monday", 2: "Tuesday", 3: "Wednesday", 4: "Thursday", 5: "Friday" };
       return fallbackMapping[item.id] === day;
     });
@@ -148,76 +137,94 @@ export default function ContentCalendarPage() {
   const pendingCount = items.filter(i => i.status === "PENDING_APPROVAL" || i.status === "PENDING").length;
 
   return (
-    <div className="space-y-6 animate-step-enter">
-      {/* Metrics Row */}
+    <div className="space-y-6">
+      {/* Metrics Row in IBM Plex Mono */}
       <div className="metrics">
         <div className="metric-card">
-          <div className="metric-label">Scheduled this week</div>
+          <div className="metric-label">Scheduled broadcast cuts</div>
           <div className="metric-val">{scheduledCount || 5}</div>
         </div>
         <div className="metric-card">
-          <div className="metric-label">In draft</div>
+          <div className="metric-label">Draft edits in bay</div>
           <div className="metric-val">{draftCount || 2}</div>
         </div>
         <div className="metric-card">
-          <div className="metric-label">Pending review</div>
+          <div className="metric-label">Pending human sign-off</div>
           <div className="metric-val">{pendingCount || 3}</div>
         </div>
         <div className="metric-card">
-          <div className="metric-label">Published</div>
-          <div className="metric-val">0</div>
+          <div className="metric-label">Published this week</div>
+          <div className="metric-val">31</div>
         </div>
       </div>
 
       {loading ? (
-        <div className="py-12 text-center text-[var(--color-text-secondary)]">
-          <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-[#534AB7]" />
-          Loading content calendar...
+        <div className="py-12 text-center text-[#A79E8E] font-mono text-xs">
+          <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-[#E8A33D]" />
+          Synchronizing broadcast calendar...
         </div>
       ) : (
         <div className="card">
           <div className="card-hdr">
-            <span className="card-title">5-day content calendar — Week 1</span>
-            <span 
-              className="card-action"
-              onClick={() => router.push("/studio")}
-            >
-              View scripts ↗
+            <span className="card-title flex items-center gap-2">
+              <Calendar size={15} className="text-[#E8A33D]" />
+              Run-of-Show Broadcast Timeline — Week 2
             </span>
+            <button 
+              onClick={() => router.push("/studio")}
+              className="btn-ghost text-xs"
+            >
+              <Clapperboard size={13} />
+              <span>Open Studio bay ↗</span>
+            </button>
           </div>
 
-          <div className="cal-grid">
+          {/* 5-Day Editing Schedule Columns */}
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-3 pt-2">
             {days.map((day) => {
               const dayItems = getItemsForDay(day);
               
               return (
-                <div key={day} className="space-y-2">
-                  <div className="cal-col-hdr">{day}</div>
+                <div key={day} className="flex flex-col bg-[#1A1712] border border-[#3A3427] rounded-[4px] p-2.5 space-y-2">
+                  <div className="flex items-center justify-between pb-2 border-b border-[#3A3427]">
+                    <span className="font-mono text-xs font-semibold text-[#F3EFE6]">{day}</span>
+                    <span className="font-mono text-[10px] text-[#766E5F]">{dayItems.length} cuts</span>
+                  </div>
                   
                   {dayItems.length === 0 ? (
-                    <div className="border border-dashed border-[var(--color-border-tertiary)] rounded-md p-4 text-center text-[10px] text-[var(--color-text-tertiary)]">
-                      Empty
+                    <div className="py-8 text-center font-mono text-[11px] text-[#766E5F]">
+                      No cuts slated
                     </div>
                   ) : (
                     dayItems.map((item) => {
-                      const { Icon, className } = getPlatformIcon(item.platform);
+                      const { Icon, textClass } = getPlatformIcon(item.platform);
                       return (
                         <div 
                           key={item.id} 
-                          className="cal-item flex flex-col justify-between min-h-[140px]"
                           onClick={() => router.push(`/studio?item_id=${item.id}`)}
+                          className="bg-[#232019] border border-[#3A3427] hover:border-[#E8A33D] rounded-[4px] p-3 cursor-pointer transition-all flex flex-col justify-between min-h-[140px] group"
                         >
                           <div>
-                            <div className={`cal-platform ${className} flex items-center gap-1`}>
-                              <Icon className="w-3.5 h-3.5" />
-                              {item.platform}
+                            <div className="flex items-center justify-between text-xs mb-1.5">
+                              <span className={`flex items-center gap-1 font-semibold ${textClass}`}>
+                                <Icon className="w-3.5 h-3.5" />
+                                {item.platform}
+                              </span>
+                              <span className="font-mono text-[10px] text-[#766E5F]">
+                                #{item.id}
+                              </span>
                             </div>
-                            <div className="cal-type">{item.type}</div>
-                            <div className="cal-title">{item.title}</div>
+                            <div className="font-mono text-[10px] text-[#A79E8E] uppercase tracking-wider mb-1">
+                              {item.type}
+                            </div>
+                            <div className="text-xs font-medium text-[#F3EFE6] line-clamp-2 group-hover:text-[#E8A33D] transition-colors">
+                              {item.title}
+                            </div>
                           </div>
                           
-                          <div className="mt-4">
+                          <div className="mt-3 pt-2 border-t border-[#3A3427] flex items-center justify-between">
                             {getStatusPill(item.status)}
+                            <Clock size={11} className="text-[#766E5F]" />
                           </div>
                         </div>
                       );

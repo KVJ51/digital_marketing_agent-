@@ -1,24 +1,9 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
-import Link from "next/link";
+import React, { useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
-import { 
-  LayoutDashboard, 
-  Target, 
-  Calendar, 
-  Video, 
-  CheckSquare, 
-  BarChart3, 
-  Brain,
-  Bot,
-  Settings,
-  Sparkles,
-  Sun,
-  Moon,
-  ShieldCheck,
-  ChevronRight
-} from "lucide-react";
+import { Rail } from "../components/Rail";
+import { ChevronRight, Sparkles, Circle } from "lucide-react";
 import "./globals.css";
 
 export default function RootLayout({
@@ -27,187 +12,107 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
-  const [theme, setTheme] = useState<"light" | "dark">("dark");
-  const [mounted, setMounted] = useState(false);
+  const [timecode, setTimecode] = useState("00:14:32:18");
 
+  // Simulated live running timecode in IBM Plex Mono
   useEffect(() => {
-    setMounted(true);
-    const saved = localStorage.getItem("founderos_theme") as "light" | "dark" | null;
-    if (saved) {
-      setTheme(saved);
-      document.documentElement.setAttribute("data-theme", saved);
-    } else {
-      // Default to dark mode for sleek AI aesthetic
-      setTheme("dark");
-      document.documentElement.setAttribute("data-theme", "dark");
-    }
+    const timer = setInterval(() => {
+      const d = new Date();
+      const h = String(d.getHours()).padStart(2, "0");
+      const m = String(d.getMinutes()).padStart(2, "0");
+      const s = String(d.getSeconds()).padStart(2, "0");
+      const f = String(Math.floor((d.getMilliseconds() / 1000) * 30)).padStart(2, "0");
+      setTimecode(`${h}:${m}:${s}:${f}`);
+    }, 100);
+    return () => clearInterval(timer);
   }, []);
 
-  const toggleTheme = () => {
-    const nextTheme = theme === "dark" ? "light" : "dark";
-    setTheme(nextTheme);
-    localStorage.setItem("founderos_theme", nextTheme);
-    document.documentElement.setAttribute("data-theme", nextTheme);
-  };
-
-  const categories = [
-    {
-      title: "Command",
-      items: [
-        { name: "Overview", href: "/dashboard", icon: LayoutDashboard },
-        { name: "Strategy hub", href: "/strategy", icon: Target },
-        { name: "Content calendar", href: "/calendar", icon: Calendar },
-      ]
-    },
-    {
-      title: "Production",
-      items: [
-        { name: "Video studio", href: "/studio", icon: Video },
-        { name: "Approvals", href: "/approvals", icon: CheckSquare, badge: 3 },
-      ]
-    },
-    {
-      title: "Intelligence",
-      items: [
-        { name: "Analytics", href: "/analytics", icon: BarChart3 },
-        { name: "Memory graph", href: "/memory", icon: Brain },
-        { name: "Agent status", href: "/agents", icon: Bot },
-      ]
-    }
-  ];
-
-  // If we are on root landing (onboarding page), don't show sidebar or topbar
+  // If we are on root landing (onboarding / setup page), allow full view or clean calibration deck
   const isOnboarding = pathname === "/onboarding" || pathname === "/";
 
-  const titles: { [key: string]: string } = {
-    "/dashboard": "Overview",
-    "/strategy": "Strategy hub",
-    "/calendar": "Content calendar",
-    "/studio": "Video studio",
-    "/approvals": "Approvals queue",
-    "/analytics": "Analytics & insights",
-    "/memory": "Memory knowledge graph",
-    "/agents": "Agent status",
-    "/": "Company setup",
-    "/onboarding": "Company setup"
+  const titles: { [key: string]: { section: string; title: string } } = {
+    "/dashboard": { section: "Command", title: "Run of show" },
+    "/strategy": { section: "Command", title: "Strategy hub" },
+    "/calendar": { section: "Production", title: "Content calendar" },
+    "/studio": { section: "Production", title: "Video studio bay" },
+    "/editor": { section: "Production", title: "Mode B: Manual Multi-Clip Editor" },
+    "/copilot": { section: "Production", title: "Mode C: AI Copilot Bay" },
+    "/approvals": { section: "Production", title: "Approvals queue" },
+    "/analytics": { section: "Intelligence", title: "Analytics & telemetry" },
+    "/memory": { section: "Intelligence", title: "Memory knowledge graph" },
+    "/agents": { section: "Intelligence", title: "Agent status" },
+    "/": { section: "Settings", title: "Production calibration" },
+    "/onboarding": { section: "Settings", title: "Production calibration" }
   };
-  const pageTitle = titles[pathname] || "Dashboard";
+
+  const currentInfo = titles[pathname] || { section: "FounderOS", title: "Editing Bay" };
 
   return (
-    <html lang="en" data-theme={theme} suppressHydrationWarning>
+    <html lang="en" className="dark">
       <head>
-        <title>FounderOS AI Digital Marketing Agent</title>
-        <meta name="description" content="AI Multi-Agent Marketing Team for Founders" />
+        <title>FounderOS — The Editing Bay</title>
+        <meta name="description" content="AI Multi-Agent Marketing Team & Video Post-Production Suite for Founders" />
+        <link rel="preconnect" href="https://api.fontshare.com" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+        <link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600,700&display=swap" rel="stylesheet" />
+        <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
       </head>
-      <body className="min-h-screen p-2 md:p-3 selection:bg-[#6366f1] selection:text-white">
-        <div className="shell">
-          {/* Sidebar */}
-          {!isOnboarding && (
-            <aside className="nav" role="navigation" aria-label="Main navigation">
-              <div className="nav-logo">
-                <div className="logo-mark">F</div>
-                <div className="min-w-0">
-                  <div className="logo-text">FounderOS</div>
-                  <div className="logo-sub">AI Marketing Agent</div>
-                </div>
-              </div>
+      <body className="min-h-screen bg-[#1A1712] text-[#F3EFE6] selection:bg-[#E8A33D] selection:text-[#1A1712]">
+        {isOnboarding ? (
+          children
+        ) : (
+          <div className="p-2 md:p-3 min-h-screen flex flex-col">
+            <div className="shell flex-1">
+              {/* Editing Bay Left Rail Navigation */}
+              <Rail />
 
-              <div className="flex-1 overflow-y-auto space-y-4 px-1">
-                {categories.map((cat, idx) => (
-                  <div key={idx} className="space-y-1">
-                    <div className="nav-section">{cat.title}</div>
-                    {cat.items.map((item) => {
-                      const isActive = pathname === item.href;
-                      const Icon = item.icon;
-                      return (
-                        <Link
-                          key={item.name}
-                          href={item.href}
-                          className={`nav-item ${isActive ? "active" : ""}`}
-                        >
-                          <Icon className="w-4 h-4 shrink-0" />
-                          <span className="truncate">{item.name}</span>
-                          {item.badge !== undefined && (
-                            <span className="nav-badge">{item.badge}</span>
-                          )}
-                        </Link>
-                      );
-                    })}
+              {/* Main Monitor & Stage Area */}
+              <main className="main">
+                <header className="topbar">
+                  {/* View breadcrumb & title */}
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-xs text-[#766E5F] font-medium tracking-wide uppercase">
+                      {currentInfo.section}
+                    </span>
+                    <ChevronRight className="w-3.5 h-3.5 text-[#3A3427]" />
+                    <h1 className="topbar-title">{currentInfo.title}</h1>
                   </div>
-                ))}
-              </div>
 
-              <div className="nav-footer">
-                <Link
-                  href="/"
-                  className={`nav-item ${pathname === "/" ? "active" : ""}`}
-                >
-                  <Settings className="w-4 h-4 shrink-0" />
-                  <span>Company setup</span>
-                </Link>
-              </div>
-            </aside>
-          )}
+                  {/* Right controls: Live Timecode, Agent Status, Single Filled Primary Action */}
+                  <div className="flex items-center gap-4 ml-auto">
+                    {/* Timecode HUD */}
+                    <div className="hidden sm:flex items-center gap-2 border border-[#3A3427] bg-[#1A1712] px-2.5 py-1 rounded-[4px]">
+                      <span className="h-1.5 w-1.5 rounded-full bg-[#C0453B] animate-pulse" />
+                      <span className="font-mono text-xs text-[#E8A33D] tabular-nums tracking-widest">
+                        {timecode}
+                      </span>
+                    </div>
 
-          {/* Main Content Area */}
-          <main className="main">
-            {!isOnboarding && (
-              <header className="topbar">
-                {/* Breadcrumb & Title */}
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="text-xs text-[var(--color-text-tertiary)] hidden sm:inline font-medium">FounderOS</span>
-                  <ChevronRight className="w-3.5 h-3.5 text-[var(--color-text-tertiary)] hidden sm:inline" />
-                  <h1 className="topbar-title">{pageTitle}</h1>
-                </div>
+                    {/* Agents Online Tag */}
+                    <div className="hidden md:flex items-center gap-1.5 text-xs text-[#7FA37A] border border-[#7FA37A]/30 bg-[#7FA37A]/10 px-2.5 py-1 rounded-[4px]">
+                      <span className="h-1.5 w-1.5 rounded-full bg-[#7FA37A]" />
+                      <span>9 agents online</span>
+                    </div>
 
-                {/* Center / Right controls */}
-                <div className="flex items-center gap-3 ml-auto">
-                  <span className="pill pill-success hidden md:inline-flex shadow-xs">
-                    <span className="dot" />
-                    9 agents online
-                  </span>
-
-                  {/* Theme Switcher Button */}
-                  {mounted && (
-                    <button
-                      onClick={toggleTheme}
-                      className="theme-toggle-btn"
-                      title={theme === "dark" ? "Switch to Light theme" : "Switch to Dark theme"}
-                      aria-label="Toggle theme"
+                    {/* Single Filled Accent Button */}
+                    <button 
+                      onClick={() => alert("AI Strategy Agent: Generated 5 new campaign angles for the upcoming marketing cycle.")}
+                      className="btn-primary"
                     >
-                      {theme === "dark" ? (
-                        <>
-                          <Sun className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                          <span className="hidden sm:inline font-semibold">Light</span>
-                        </>
-                      ) : (
-                        <>
-                          <Moon className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                          <span className="hidden sm:inline font-semibold">Dark</span>
-                        </>
-                      )}
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>New week ↗</span>
                     </button>
-                  )}
+                  </div>
+                </header>
 
-                  <button 
-                    onClick={() => alert("AI Strategy Agent: Generated 5 new campaign angles for the upcoming marketing cycle.")}
-                    className="btn btn-primary shadow-sm"
-                  >
-                    <Sparkles className="w-3.5 h-3.5" />
-                    <span>New week ↗</span>
-                  </button>
+                <div className="content">
+                  {children}
                 </div>
-              </header>
-            )}
-
-            <div className="content">
-              {children}
+              </main>
             </div>
-          </main>
-        </div>
+          </div>
+        )}
       </body>
     </html>
   );

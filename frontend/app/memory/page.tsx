@@ -43,7 +43,6 @@ export default function MemoryGraphPage() {
       const data = await res.json();
       setGraph(data);
     } catch (err) {
-      // Mock Fallbacks matching founderos_dashboard.html memory graph exactly
       const mockGraph: MemoryGraph = {
         nodes: [
           { id: "Automation", group: 1, size: 25, engagement: 92.4, times_posted: 4 },
@@ -81,101 +80,128 @@ export default function MemoryGraphPage() {
   };
 
   return (
-    <div className="space-y-6 animate-step-enter">
-      {/* Metrics Row */}
+    <div className="space-y-6">
+      {/* Metrics Row in IBM Plex Mono */}
       <div className="metrics">
-        <div className="metric-card"><div className="metric-label">Known topics</div><div className="metric-val">{graph.nodes.length || 8}</div></div>
-        <div className="metric-card"><div className="metric-label">Knowledge links</div><div className="metric-val">{graph.links.length || 14}</div></div>
-        <div className="metric-card"><div className="metric-label">Top engagement topic</div><div className="metric-val" style={{ fontSize: "14px", marginTop: "8px" }}>Automation</div></div>
-        <div className="metric-card"><div className="metric-label">Novel angles left</div><div className="metric-val">5</div></div>
+        <div className="metric-card">
+          <div className="metric-label">Mapped knowledge topics</div>
+          <div className="metric-val">{graph.nodes.length || 8}</div>
+        </div>
+        <div className="metric-card">
+          <div className="metric-label">Semantic links</div>
+          <div className="metric-val">{graph.links.length || 14}</div>
+        </div>
+        <div className="metric-card">
+          <div className="metric-label">Top engagement node</div>
+          <div className="font-mono text-sm font-bold text-[#E8A33D] mt-2">Automation (92.4)</div>
+        </div>
+        <div className="metric-card">
+          <div className="metric-label">Unexplored angles</div>
+          <div className="metric-val">5</div>
+        </div>
       </div>
 
       {loading ? (
-        <div className="py-12 text-center text-[var(--color-text-secondary)]">
-          <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-[#534AB7]" />
+        <div className="py-12 text-center text-[#A79E8E] font-mono text-xs">
+          <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-[#E8A33D]" />
           Synchronizing cognitive memory graph...
         </div>
       ) : (
         <div className="grid2">
-          {/* Left Card: Topic Memory Nodes */}
+          {/* Topic Memory Nodes */}
           <div className="card">
             <div className="card-hdr">
-              <span className="card-title">Topic memory nodes</span>
-              <span 
-                className="card-action flex items-center gap-1"
+              <span className="card-title flex items-center gap-2">
+                <Network size={14} className="text-[#E8A33D]" />
+                Topic Memory Registry
+              </span>
+              <button 
                 onClick={handleGetAngles}
+                className="btn-ghost text-xs"
               >
                 {fetchingAngles ? (
                   <>
-                    <RefreshCw className="w-3 h-3 animate-spin" />
-                    Analyzing...
+                    <RefreshCw className="w-3 h-3 animate-spin text-[#E8A33D]" />
+                    <span>Analyzing...</span>
                   </>
                 ) : (
-                  "Get new angles ↗"
+                  <span>Compile new angles ↗</span>
                 )}
-              </span>
+              </button>
             </div>
             
-            <div className="memory-node-list">
+            <div className="space-y-1 divide-y divide-[#3A3427]">
               {graph.nodes.map((node) => (
-                <div key={node.id} className="mem-node">
-                  <div className="mem-bubble">
-                    {getBubbleText(node.id)}
-                  </div>
-                  <div>
-                    <div className="mem-name">{node.id}</div>
-                    <div className="mem-meta">
-                      Posted {node.times_posted}× · Last: {node.times_posted > 2 ? "2 days ago" : "6 days ago"}
+                <div key={node.id} className="hairline-row flex items-center justify-between py-3">
+                  <div className="flex items-center gap-3">
+                    <div className="h-8 w-8 rounded-[3px] bg-[#1A1712] border border-[#3A3427] flex items-center justify-center font-mono text-xs font-bold text-[#E8A33D]">
+                      {getBubbleText(node.id)}
+                    </div>
+                    <div>
+                      <div className="text-xs font-semibold text-[#F3EFE6]">{node.id}</div>
+                      <div className="font-mono text-[10px] text-[#766E5F]">
+                        Posted {node.times_posted}× · Last: {node.times_posted > 2 ? "2 days ago" : "6 days ago"}
+                      </div>
                     </div>
                   </div>
-                  <div className="mem-score">{node.engagement.toFixed(1)}</div>
+                  <div className="font-mono text-xs font-bold text-[#7FA37A]">
+                    {node.engagement.toFixed(1)} score
+                  </div>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Right Card: Novel Angles */}
+          {/* Novel Angles to Explore */}
           <div className="card">
             <div className="card-hdr">
-              <span className="card-title">Novel angles to explore</span>
+              <span className="card-title flex items-center gap-2">
+                <Brain size={14} className="text-[#E8A33D]" />
+                Novel Angles to Explore
+              </span>
+              <span className="font-mono text-xs text-[#766E5F]">High impact</span>
             </div>
             
-            <div className="divide-y divide-[var(--color-border-tertiary)]">
-              <div className="insight-item py-3">
-                <div className="insight-icon ag-purple">
-                  <EyeOff className="w-4 h-4" />
-                </div>
-                <div className="insight-text">
-                  <b>Behind the scenes / Day in the life</b> — Not yet used for Automation topic. High novelty potential.
-                </div>
-              </div>
-
-              <div className="insight-item py-3">
-                <div className="insight-icon ag-blue">
-                  <Brain className="w-4 h-4" />
-                </div>
-                <div className="insight-text">
-                  <b>Stat-driven case study</b> — Not yet used for Founder Story. Combine with a real customer metric for social proof.
-                </div>
-              </div>
-
-              <div className="insight-item py-3">
-                <div className="insight-icon ag-coral">
-                  <Flame className="w-4 h-4" />
-                </div>
-                <div className="insight-text">
-                  <b>Controversial / unpopular opinion</b> — High engagement potential. Not yet explored across any topic.
-                </div>
-              </div>
-
-              <div className="insight-item py-3">
-                <div className="insight-icon ag-amber">
-                  <Telescope className="w-4 h-4" />
-                </div>
-                <div className="insight-text">
-                  <b>Future predictions / 5 years out</b> — Thought leadership angle. No coverage yet in SaaS Growth or Workflow Design.
-                </div>
-              </div>
+            <div className="space-y-2.5 pt-1">
+              {[
+                {
+                  icon: EyeOff,
+                  color: "text-[#E8A33D] border-[#E8A33D]/30",
+                  title: "Behind the scenes / Day in the life",
+                  desc: "Not yet used for Automation topic. High founder authenticity score."
+                },
+                {
+                  icon: Brain,
+                  color: "text-[#7FA37A] border-[#7FA37A]/30",
+                  title: "Stat-driven case study",
+                  desc: "Combine Founder Story with real user retention metrics for proof."
+                },
+                {
+                  icon: Flame,
+                  color: "text-[#C0453B] border-[#C0453B]/30",
+                  title: "Controversial / unpopular opinion",
+                  desc: "High top-of-funnel watch time. Contrast standard operating advice."
+                },
+                {
+                  icon: Telescope,
+                  color: "text-[#A79E8E] border-[#A79E8E]/30",
+                  title: "Future industry forecast / 3-5 years",
+                  desc: "Thought leadership angle. Unexplored in SaaS Growth & Workflow tracks."
+                }
+              ].map((angle, idx) => {
+                const Icon = angle.icon;
+                return (
+                  <div key={idx} className="bg-[#1A1712] border border-[#3A3427] rounded-[4px] p-3 flex items-start gap-3">
+                    <div className={`p-1.5 rounded-[3px] border bg-[#232019] ${angle.color} shrink-0 mt-0.5`}>
+                      <Icon size={14} />
+                    </div>
+                    <div className="text-xs">
+                      <div className="font-semibold text-[#F3EFE6]">{angle.title}</div>
+                      <div className="text-[11px] text-[#A79E8E] mt-0.5 leading-relaxed">{angle.desc}</div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
